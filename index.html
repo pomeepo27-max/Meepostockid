@@ -1515,4 +1515,76 @@ document.getElementById('historyFilter').addEventListener('change', renderHistor
 document.getElementById('historyCloseBtn').addEventListener('click', ()=> document.getElementById('historyOverlay').classList.remove('open'));
 document.getElementById('historyOverlay').addEventListener('click', (e)=>{ if(e.target.id==='historyOverlay') e.currentTarget.classList.remove('open'); });
 
-document.getElementById('
+document.getElementById('deleteCancelBtn').addEventListener('click', ()=>{
+  document.getElementById('deleteConfirmOverlay').classList.remove('open');
+  pendingDeleteId = null;
+});
+document.getElementById('deleteConfirmOverlay').addEventListener('click', (e)=>{ if(e.target.id==='deleteConfirmOverlay'){ e.currentTarget.classList.remove('open'); pendingDeleteId = null; } });
+document.getElementById('deleteConfirmBtn').addEventListener('click', async ()=>{
+  if(!pendingDeleteId) return;
+  const deleted = items.find(i=>i.id===pendingDeleteId);
+  items = items.filter(i=>i.id !== pendingDeleteId);
+  pendingDeleteId = null;
+  await saveItems();
+  if(deleted) logActivity('delete', deleted);
+  renderAll();
+  document.getElementById('deleteConfirmOverlay').classList.remove('open');
+  toast('ລຶບແລ້ວ');
+});
+
+document.getElementById('orderAuthCancelBtn').addEventListener('click', ()=>{
+  document.getElementById('orderAuthOverlay').classList.remove('open');
+  pendingClaimId = null;
+});
+document.getElementById('orderAuthOverlay').addEventListener('click', (e)=>{ if(e.target.id==='orderAuthOverlay'){ e.currentTarget.classList.remove('open'); pendingClaimId = null; } });
+function tryOrderAuth(){
+  const val = document.getElementById('f-order-pass').value;
+  if(val === ORDER_PASSWORD){
+    document.getElementById('orderAuthOverlay').classList.remove('open');
+    const id = pendingClaimId;
+    pendingClaimId = null;
+    if(id) claimItem(id);
+  } else {
+    document.getElementById('orderAuthError').style.display = 'block';
+  }
+}
+document.getElementById('orderAuthSubmitBtn').addEventListener('click', tryOrderAuth);
+document.getElementById('f-order-pass').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') tryOrderAuth(); });
+
+document.getElementById('modeToggle').addEventListener('click', ()=>{
+  if(mode === 'employee'){
+    if(adminUnlocked){
+      switchMode('admin');
+    } else {
+      document.getElementById('f-admin-pass').value = '';
+      document.getElementById('adminAuthError').style.display = 'none';
+      document.getElementById('adminAuthOverlay').classList.add('open');
+    }
+  } else {
+    switchMode('employee');
+  }
+});
+document.getElementById('adminAuthCancelBtn').addEventListener('click', ()=> document.getElementById('adminAuthOverlay').classList.remove('open'));
+document.getElementById('adminAuthOverlay').addEventListener('click', (e)=>{ if(e.target.id==='adminAuthOverlay') e.currentTarget.classList.remove('open'); });
+function tryAdminLogin(){
+  const val = document.getElementById('f-admin-pass').value;
+  if(val === ADMIN_PASSWORD){
+    adminUnlocked = true;
+    document.getElementById('adminAuthOverlay').classList.remove('open');
+    switchMode('admin');
+  } else {
+    document.getElementById('adminAuthError').style.display = 'block';
+  }
+}
+document.getElementById('adminAuthSubmitBtn').addEventListener('click', tryAdminLogin);
+document.getElementById('f-admin-pass').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') tryAdminLogin(); });
+document.getElementById('claimCancelBtn').addEventListener('click', ()=> document.getElementById('claimOverlay').classList.remove('open'));
+document.getElementById('claimOverlay').addEventListener('click', (e)=>{ if(e.target.id==='claimOverlay') e.currentTarget.classList.remove('open'); });
+document.getElementById('resultDoneBtn').addEventListener('click', ()=> document.getElementById('resultOverlay').classList.remove('open'));
+document.getElementById('resultOverlay').addEventListener('click', (e)=>{ if(e.target.id==='resultOverlay') e.currentTarget.classList.remove('open'); });
+
+renderPresetChips();
+loadItems();
+</script>
+</body>
+</html>
