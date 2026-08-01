@@ -134,6 +134,28 @@
     gap: 12px;
     margin-bottom: 10px;
   }
+  .tile-group-label{
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 18px 0 10px;
+    padding-left: 2px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tile-group-label::before{
+    content: '';
+    width: 4px;
+    height: 14px;
+    border-radius: 2px;
+    background: var(--gradient);
+    flex-shrink: 0;
+  }
+  .tile-group-label:first-child{ margin-top: 0; }
   .tile{
     background: var(--panel);
     border: 1px solid var(--line);
@@ -263,6 +285,46 @@
   }
   .search{ flex: 1; min-width: 140px; }
   .toolbar select{ min-width: 110px; }
+
+  .chip-filter-row{
+    display:flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .filter-chip{
+    display:flex;
+    align-items:center;
+    gap: 7px;
+    background: var(--panel);
+    border: 1.5px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 8px 6px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform .1s ease;
+  }
+  .filter-chip:hover{ transform: translateY(-1px); }
+  .filter-chip.active{
+    border-color: currentColor;
+    box-shadow: 0 0 0 1px currentColor inset;
+  }
+  .filter-chip .dot{
+    width: 10px; height:10px; border-radius:50%;
+    flex-shrink:0;
+  }
+  .filter-chip .count{
+    background: currentColor;
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .filter-chip .count span{
+    color: var(--bg);
+  }
+  .filter-chip.all .count{ background: var(--muted); }
 
   .btn{
     background: var(--gradient);
@@ -530,7 +592,7 @@
 
 <main>
   <div id="employeeView">
-    <div class="tile-grid" id="tileGrid"></div>
+    <div id="tileGrid"></div>
     <div id="tileEmpty" class="empty" style="display:none;">
       <div class="big">ຍັງບໍ່ມີໄອດີໃນສະຕັອກ</div>
       ລໍຖ້າແອັດມິນເພີ່ມສະຕັອກກ່ອນເດີ້
@@ -550,7 +612,6 @@
 
   <div class="toolbar">
     <input class="search" id="search" placeholder="ຄົ້ນຫາ ແອັບ / ໄອດີ / ລູກຄ້າ...">
-    <select id="filter-service"><option value="">ທຸກແອັບ</option></select>
     <select id="filter-status">
       <option value="">ທຸກສະຖານະ</option>
       <option value="available">ພ້ອມຂາຍ</option>
@@ -559,6 +620,8 @@
       <option value="reported">ຖືກໄລ່ອອກ/ມີບັນຫາ</option>
     </select>
   </div>
+
+  <div class="chip-filter-row" id="serviceChips"></div>
 
   <div id="list" class="grid"></div>
   <div id="empty" class="empty" style="display:none;">
@@ -726,6 +789,7 @@ let pendingClaimId = null;
 let items = [];
 let editingId = null;
 let mode = 'employee';
+let selectedServiceFilter = '';
 
 // ສີສະເພາະສຳລັບແອັບທີ່ພົບເລື້ອຍ ສ່ວນແອັບອື່ນຈະສຸ່ມສີຕາມຊື່ແບບຄົງທີ່
 const SERVICE_COLORS = {
@@ -981,11 +1045,45 @@ function statusLabel(s){
 }
 
 function updateServiceFilter(){
-  const sel = document.getElementById('filter-service');
-  const current = sel.value;
-  const services = [...new Set(items.map(i=>i.service).filter(Boolean))].sort();
-  sel.innerHTML = '<option value="">ທຸກແອັບ</option>' + services.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-  sel.value = current;
+  const services = [...new Set(items.map(i=>i.service).filter(Boolean))];
+
+  const groupOrder = PRESET_APPS.map(g=>g.group).concat(['ອື່ນໆ']);
+  const buckets = {};
+  services.forEach(s=>{
+    const cat = getServiceCategory(s);
+    if(!buckets[cat]) buckets[cat] = [];
+    buckets[cat].push(s);
+  });
+  Object.values(buckets).forEach(arr=>arr.sort((a,b)=>a.localeCompare(b)));
+
+  const orderedServices = [];
+  groupOrder.forEach(cat=>{
+    if(buckets[cat]) orderedServices.push(...buckets[cat]);
+  });
+
+  const chipRow = document.getElementById('serviceChips');
+  let chipsHtml = `
+    <button type="button" class="filter-chip all ${selectedServiceFilter===''?'active':''}" data-chip="">
+      ທັງໝົດ <span class="count"><span>${items.length}</span></span>
+    </button>`;
+  chipsHtml += orderedServices.map(s=>{
+    const color = getServiceColor(s);
+    const count = items.filter(i=>i.service===s).length;
+    const isActive = selectedServiceFilter===s;
+    return `
+      <button type="button" class="filter-chip ${isActive?'active':''}" data-chip="${escapeHtml(s)}" style="color:${color};">
+        <span class="dot" style="background:${color};"></span>${escapeHtml(s)}
+        <span class="count" style="background:${color};"><span>${count}</span></span>
+      </button>`;
+  }).join('');
+  chipRow.innerHTML = chipsHtml;
+
+  chipRow.querySelectorAll('[data-chip]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      selectedServiceFilter = btn.getAttribute('data-chip');
+      renderAll();
+    });
+  });
 
   const dl = document.getElementById('serviceList');
   dl.innerHTML = services.map(s=>`<option value="${escapeHtml(s)}">`).join('');
@@ -998,7 +1096,7 @@ function escapeHtml(str){
 function render(){
   updateServiceFilter();
   const search = document.getElementById('search').value.trim().toLowerCase();
-  const fService = document.getElementById('filter-service').value;
+  const fService = selectedServiceFilter;
   const fStatus = document.getElementById('filter-status').value;
 
   let filtered = items.filter(it=>{
@@ -1029,7 +1127,23 @@ function render(){
     empty.style.display = 'none';
   }
 
+  // ຈັດກຸ່ມລາຍການຕາມໝວດໝູ່ (ຮັກສາລຳດັບການຮຽງຕາມວັນໝົດອາຍຸພາຍໃນແຕ່ລະໝວດ)
+  const groupOrder = PRESET_APPS.map(g=>g.group).concat(['ອື່ນໆ']);
+  const buckets = {};
   filtered.forEach(it=>{
+    const cat = getServiceCategory(it.service);
+    if(!buckets[cat]) buckets[cat] = [];
+    buckets[cat].push(it);
+  });
+
+  groupOrder.forEach(cat=>{
+    if(!buckets[cat] || buckets[cat].length === 0) return;
+    const label = document.createElement('div');
+    label.className = 'tile-group-label';
+    label.textContent = `${cat} (${buckets[cat].length} ລາຍການ)`;
+    list.appendChild(label);
+
+    buckets[cat].forEach(it=>{
     const card = document.createElement('div');
     card.className = 'card';
     const du = daysUntil(it.expiry);
@@ -1082,6 +1196,7 @@ function render(){
       </div>
     `;
     list.appendChild(card);
+    });
   });
 
   document.getElementById('stat-total').textContent = items.length;
@@ -1127,20 +1242,19 @@ function renderAll(){
   renderTiles();
 }
 
+function getServiceCategory(name){
+  if(!name) return 'ອື່ນໆ';
+  const key = name.trim().toLowerCase();
+  for(const g of PRESET_APPS){
+    if(g.names.some(n=>n.toLowerCase()===key)) return g.group;
+  }
+  return 'ອື່ນໆ';
+}
+
 function renderTiles(){
   const grid = document.getElementById('tileGrid');
   const emptyEl = document.getElementById('tileEmpty');
   const services = [...new Set(items.map(i=>i.service).filter(Boolean))];
-
-  const presetOrder = [];
-  PRESET_APPS.forEach(g=>g.names.forEach(n=>presetOrder.push(n.toLowerCase())));
-  services.sort((a,b)=>{
-    const ia = presetOrder.indexOf(a.toLowerCase());
-    const ib = presetOrder.indexOf(b.toLowerCase());
-    const pa = ia===-1 ? 999 : ia, pb = ib===-1 ? 999 : ib;
-    if(pa !== pb) return pa - pb;
-    return a.localeCompare(b);
-  });
 
   if(services.length === 0){
     grid.innerHTML = '';
@@ -1149,17 +1263,35 @@ function renderTiles(){
   }
   emptyEl.style.display = 'none';
 
-  grid.innerHTML = services.map(s=>{
-    const count = items.filter(i=>i.service===s && i.status==='available').length;
-    const color = getServiceColor(s);
-    const hasStock = count > 0;
-    return `
-      <div class="tile ${hasStock?'':'empty-stock'}" data-service="${escapeHtml(s)}">
-        <div class="tile-icon" style="background:${color}">${escapeHtml(s.trim().charAt(0).toUpperCase())}</div>
-        <div class="tile-name">${escapeHtml(s)}</div>
-        <div class="tile-count ${hasStock?'has-stock':''}">${hasStock ? 'ເຫຼືອ '+count+' ID' : 'ໝົດສະຕັອກ'}</div>
-      </div>`;
-  }).join('');
+  // ຈັດກຸ່ມແອັບຕາມໝວດໝູ່ (ຈາກ PRESET_APPS) ຮັກສາລຳດັບໝວດຕາມ PRESET_APPS ແລ້ວຕາມດ້ວຍ "ອື່ນໆ"
+  const groupOrder = PRESET_APPS.map(g=>g.group).concat(['ອື່ນໆ']);
+  const buckets = {};
+  services.forEach(s=>{
+    const cat = getServiceCategory(s);
+    if(!buckets[cat]) buckets[cat] = [];
+    buckets[cat].push(s);
+  });
+  Object.values(buckets).forEach(arr=>arr.sort((a,b)=>a.localeCompare(b)));
+
+  let html = '';
+  groupOrder.forEach(cat=>{
+    if(!buckets[cat] || buckets[cat].length === 0) return;
+    html += `<div class="tile-group-label">${escapeHtml(cat)}</div>`;
+    html += `<div class="tile-grid">`;
+    html += buckets[cat].map(s=>{
+      const count = items.filter(i=>i.service===s && i.status==='available').length;
+      const color = getServiceColor(s);
+      const hasStock = count > 0;
+      return `
+        <div class="tile ${hasStock?'':'empty-stock'}" data-service="${escapeHtml(s)}">
+          <div class="tile-icon" style="background:${color}">${escapeHtml(s.trim().charAt(0).toUpperCase())}</div>
+          <div class="tile-name">${escapeHtml(s)}</div>
+          <div class="tile-count ${hasStock?'has-stock':''}">${hasStock ? 'ເຫຼືອ '+count+' ID' : 'ໝົດສະຕັອກ'}</div>
+        </div>`;
+    }).join('');
+    html += `</div>`;
+  });
+  grid.innerHTML = html;
 
   grid.querySelectorAll('.tile').forEach(t=>{
     t.addEventListener('click', ()=>{
@@ -1364,7 +1496,6 @@ document.getElementById('cancelBtn').addEventListener('click', closeSheet);
 document.getElementById('saveBtn').addEventListener('click', saveForm);
 document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeSheet(); });
 document.getElementById('search').addEventListener('input', renderAll);
-document.getElementById('filter-service').addEventListener('change', renderAll);
 document.getElementById('filter-status').addEventListener('change', renderAll);
 document.getElementById('historyBtn').addEventListener('click', ()=>{
   document.getElementById('historyTitle').textContent = 'ປະຫວັດການຊື້/ແກ້ໄຂ';
@@ -1384,76 +1515,4 @@ document.getElementById('historyFilter').addEventListener('change', renderHistor
 document.getElementById('historyCloseBtn').addEventListener('click', ()=> document.getElementById('historyOverlay').classList.remove('open'));
 document.getElementById('historyOverlay').addEventListener('click', (e)=>{ if(e.target.id==='historyOverlay') e.currentTarget.classList.remove('open'); });
 
-document.getElementById('deleteCancelBtn').addEventListener('click', ()=>{
-  document.getElementById('deleteConfirmOverlay').classList.remove('open');
-  pendingDeleteId = null;
-});
-document.getElementById('deleteConfirmOverlay').addEventListener('click', (e)=>{ if(e.target.id==='deleteConfirmOverlay'){ e.currentTarget.classList.remove('open'); pendingDeleteId = null; } });
-document.getElementById('deleteConfirmBtn').addEventListener('click', async ()=>{
-  if(!pendingDeleteId) return;
-  const deleted = items.find(i=>i.id===pendingDeleteId);
-  items = items.filter(i=>i.id !== pendingDeleteId);
-  pendingDeleteId = null;
-  await saveItems();
-  if(deleted) logActivity('delete', deleted);
-  renderAll();
-  document.getElementById('deleteConfirmOverlay').classList.remove('open');
-  toast('ລຶບແລ້ວ');
-});
-
-document.getElementById('orderAuthCancelBtn').addEventListener('click', ()=>{
-  document.getElementById('orderAuthOverlay').classList.remove('open');
-  pendingClaimId = null;
-});
-document.getElementById('orderAuthOverlay').addEventListener('click', (e)=>{ if(e.target.id==='orderAuthOverlay'){ e.currentTarget.classList.remove('open'); pendingClaimId = null; } });
-function tryOrderAuth(){
-  const val = document.getElementById('f-order-pass').value;
-  if(val === ORDER_PASSWORD){
-    document.getElementById('orderAuthOverlay').classList.remove('open');
-    const id = pendingClaimId;
-    pendingClaimId = null;
-    if(id) claimItem(id);
-  } else {
-    document.getElementById('orderAuthError').style.display = 'block';
-  }
-}
-document.getElementById('orderAuthSubmitBtn').addEventListener('click', tryOrderAuth);
-document.getElementById('f-order-pass').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') tryOrderAuth(); });
-
-document.getElementById('modeToggle').addEventListener('click', ()=>{
-  if(mode === 'employee'){
-    if(adminUnlocked){
-      switchMode('admin');
-    } else {
-      document.getElementById('f-admin-pass').value = '';
-      document.getElementById('adminAuthError').style.display = 'none';
-      document.getElementById('adminAuthOverlay').classList.add('open');
-    }
-  } else {
-    switchMode('employee');
-  }
-});
-document.getElementById('adminAuthCancelBtn').addEventListener('click', ()=> document.getElementById('adminAuthOverlay').classList.remove('open'));
-document.getElementById('adminAuthOverlay').addEventListener('click', (e)=>{ if(e.target.id==='adminAuthOverlay') e.currentTarget.classList.remove('open'); });
-function tryAdminLogin(){
-  const val = document.getElementById('f-admin-pass').value;
-  if(val === ADMIN_PASSWORD){
-    adminUnlocked = true;
-    document.getElementById('adminAuthOverlay').classList.remove('open');
-    switchMode('admin');
-  } else {
-    document.getElementById('adminAuthError').style.display = 'block';
-  }
-}
-document.getElementById('adminAuthSubmitBtn').addEventListener('click', tryAdminLogin);
-document.getElementById('f-admin-pass').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') tryAdminLogin(); });
-document.getElementById('claimCancelBtn').addEventListener('click', ()=> document.getElementById('claimOverlay').classList.remove('open'));
-document.getElementById('claimOverlay').addEventListener('click', (e)=>{ if(e.target.id==='claimOverlay') e.currentTarget.classList.remove('open'); });
-document.getElementById('resultDoneBtn').addEventListener('click', ()=> document.getElementById('resultOverlay').classList.remove('open'));
-document.getElementById('resultOverlay').addEventListener('click', (e)=>{ if(e.target.id==='resultOverlay') e.currentTarget.classList.remove('open'); });
-
-renderPresetChips();
-loadItems();
-</script>
-</body>
-</html>
+document.getElementById('
