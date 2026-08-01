@@ -1277,23 +1277,21 @@ function renderPresetChips(){
   });
 }
 
-function duplicateItem(id){
+async function duplicateItem(id){
   const src = items.find(i=>i.id===id);
   if(!src) return;
-  editingId = null;
-  document.getElementById('sheetTitle').textContent = 'ກ໊ອບປີ້ສິນຄ້າ — ເພີ່ມໄອດີໃໝ່';
-  document.getElementById('f-service').value = src.service || '';
-  document.getElementById('f-package').value = src.package || '';
-  document.getElementById('f-account').value = '';
-  document.getElementById('f-password').value = '';
-  document.getElementById('f-cost').value = src.cost ?? '';
-  document.getElementById('f-price').value = src.price ?? '';
-  document.getElementById('f-status').value = 'available';
-  document.getElementById('f-expiry').value = src.expiry || '';
-  document.getElementById('f-customer').value = '';
-  document.getElementById('f-note').value = src.note || '';
-  document.getElementById('overlay').classList.add('open');
-  toast('ກ໊ອບປີ້ຂໍ້ມູນສິນຄ້າແລ້ວ ໃສ່ໄອດີ/ລະຫັດໃໝ່ໄດ້ເລີຍ');
+  const newItem = {
+    ...src,
+    id: 'id_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+    createdAt: Date.now(),
+    updatedAt: null,
+    claimedAt: null,
+  };
+  items.push(newItem);
+  await saveItems();
+  logActivity('create', newItem);
+  renderAll();
+  toast('ກ໊ອບປີ້ສິນຄ້າສຳເລັດ ເພີ່ມເປັນລາຍການໃໝ່ແລ້ວ');
 }
 
 function openSheet(id){
