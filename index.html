@@ -49,6 +49,25 @@
     --font-body: 'Inter', 'Segoe UI', sans-serif;
     --font-mono: 'JetBrains Mono', 'Consolas', monospace;
   }
+  body.dark-mode{
+    --bg: #100e18;
+    --panel: #1a1726;
+    --panel-2: #221e33;
+    --line: #362f4a;
+    --text: #f0edf7;
+    --muted: #a79bc4;
+    --accent: #ff5fa2;
+    --accent-2: #7c5cff;
+    --accent-3: #00e5c9;
+    --accent-dim: #3a1f38;
+    --warn: #ffb347;
+    --warn-dim: #4a3418;
+    --danger: #ff5c7a;
+    --danger-dim: #4a1d2a;
+    --ok: #3ee08c;
+    --ok-dim: #123829;
+    --header-bg: rgba(16,14,24,0.9);
+  }
   * { box-sizing: border-box; }
   body{
     margin:0;
@@ -63,7 +82,7 @@
     border-bottom: 1px solid var(--line);
     position: sticky;
     top: 0;
-    background: rgba(255,255,255,0.9);
+    background: var(--header-bg, rgba(255,255,255,0.9));
     backdrop-filter: blur(8px);
     z-index: 10;
   }
@@ -586,7 +605,10 @@
       </div>
       <div class="brand-sub" id="brandSub">ກົດທີ່ແອັບເພື່ອຮັບໄອດີ</div>
     </div>
-    <button class="btn ghost small" id="modeToggle">ໂໝດແອັດມິນ</button>
+    <div style="display:flex; gap:8px; align-items:flex-start;">
+      <button class="btn ghost small" id="darkModeToggle" title="ສະຫຼັບໂໝດມືດ/ສະຫວ່າງ">🌙</button>
+      <button class="btn ghost small" id="modeToggle">ໂໝດແອັດມິນ</button>
+    </div>
   </div>
 </header>
 
@@ -699,6 +721,14 @@
 <div class="overlay" id="claimOverlay">
   <div class="sheet">
     <h2 id="claimTitle">ເລືອກໄອດີ</h2>
+    <select id="claimSort" style="width:100%; margin-bottom:12px;">
+      <option value="expiry_asc">ໝົດອາຍຸໄວສຸດກ່ອນ</option>
+      <option value="expiry_desc">ໝົດອາຍຸຊ້າສຸດກ່ອນ</option>
+      <option value="price_asc">ລາຄາຕ່ຳ → ສູງ</option>
+      <option value="price_desc">ລາຄາສູງ → ຕ່ຳ</option>
+      <option value="newest">ເພີ່ມລ່າສຸດກ່ອນ</option>
+      <option value="package_az">ແພັກເກັດ A → Z</option>
+    </select>
     <div id="claimList"></div>
     <div class="sheet-actions">
       <button class="btn ghost" id="claimCancelBtn">ປິດ</button>
@@ -1301,12 +1331,47 @@ function renderTiles(){
   });
 }
 
+let currentClaimService = null;
+
+function sortAvailItems(avail, sortMode){
+  const arr = [...avail];
+  switch(sortMode){
+    case 'expiry_desc':
+      return arr.sort((a,b)=>{
+        const da = a.expiry ? new Date(a.expiry).getTime() : -Infinity;
+        const db = b.expiry ? new Date(b.expiry).getTime() : -Infinity;
+        return db - da;
+      });
+    case 'price_asc':
+      return arr.sort((a,b)=>(a.price ?? Infinity) - (b.price ?? Infinity));
+    case 'price_desc':
+      return arr.sort((a,b)=>(b.price ?? -Infinity) - (a.price ?? -Infinity));
+    case 'newest':
+      return arr.sort((a,b)=>(b.createdAt||0) - (a.createdAt||0));
+    case 'package_az':
+      return arr.sort((a,b)=>(a.package||'').localeCompare(b.package||''));
+    case 'expiry_asc':
+    default:
+      return arr.sort((a,b)=>{
+        const da = a.expiry ? new Date(a.expiry).getTime() : Infinity;
+        const db = b.expiry ? new Date(b.expiry).getTime() : Infinity;
+        return da - db;
+      });
+  }
+}
+
 function openClaimList(service){
-  const avail = items.filter(i=>i.service===service && i.status==='available').sort((a,b)=>{
-    const da = a.expiry ? new Date(a.expiry).getTime() : Infinity;
-    const db = b.expiry ? new Date(b.expiry).getTime() : Infinity;
-    return da - db;
-  });
+  currentClaimService = service;
+  document.getElementById('claimSort').value = 'expiry_asc';
+  renderClaimList();
+  document.getElementById('claimOverlay').classList.add('open');
+}
+
+function renderClaimList(){
+  const service = currentClaimService;
+  if(!service) return;
+  const sortMode = document.getElementById('claimSort').value;
+  const avail = sortAvailItems(items.filter(i=>i.service===service && i.status==='available'), sortMode);
 
   document.getElementById('claimTitle').innerHTML = `<span style="color:${getServiceColor(service)};">${escapeHtml(service)}</span> — ເລືອກໄອດີທີ່ຈະຮັບ`;
   const list = document.getElementById('claimList');
@@ -1333,8 +1398,6 @@ function openClaimList(service){
   list.querySelectorAll('[data-claim]').forEach(btn=>{
     btn.addEventListener('click', ()=> requestClaim(btn.getAttribute('data-claim')));
   });
-
-  document.getElementById('claimOverlay').classList.add('open');
 }
 
 function requestClaim(id){
@@ -1578,11 +1641,34 @@ function tryAdminLogin(){
 }
 document.getElementById('adminAuthSubmitBtn').addEventListener('click', tryAdminLogin);
 document.getElementById('f-admin-pass').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') tryAdminLogin(); });
+document.getElementById('claimSort').addEventListener('change', renderClaimList);
 document.getElementById('claimCancelBtn').addEventListener('click', ()=> document.getElementById('claimOverlay').classList.remove('open'));
 document.getElementById('claimOverlay').addEventListener('click', (e)=>{ if(e.target.id==='claimOverlay') e.currentTarget.classList.remove('open'); });
 document.getElementById('resultDoneBtn').addEventListener('click', ()=> document.getElementById('resultOverlay').classList.remove('open'));
 document.getElementById('resultOverlay').addEventListener('click', (e)=>{ if(e.target.id==='resultOverlay') e.currentTarget.classList.remove('open'); });
 
+// ============================================================
+// DARK MODE — ຈື່ຄ່າໄວ້ໃນ localStorage (ໃຊ້ໄດ້ເມື່ອເປີດຈາກເວັບຈິງ
+// ຖ້າເປີດຢູ່ໃນໜ້າ preview ຂອງ Claude ຈະບໍ່ຈື່ຄ່າຂ້າມການໂຫຼດໜ້າໃໝ່)
+// ============================================================
+function applyDarkMode(isDark){
+  document.body.classList.toggle('dark-mode', isDark);
+  document.getElementById('darkModeToggle').textContent = isDark ? '☀️' : '🌙';
+}
+
+function initDarkMode(){
+  let saved = null;
+  try{ saved = localStorage.getItem('meepo-dark-mode'); }catch(e){ /* ບໍ່ມີສິດເຂົ້າ localStorage */ }
+  applyDarkMode(saved === '1');
+}
+
+document.getElementById('darkModeToggle').addEventListener('click', ()=>{
+  const isDark = !document.body.classList.contains('dark-mode');
+  applyDarkMode(isDark);
+  try{ localStorage.setItem('meepo-dark-mode', isDark ? '1' : '0'); }catch(e){ /* ບໍ່ມີສິດເຂົ້າ localStorage */ }
+});
+
+initDarkMode();
 renderPresetChips();
 loadItems();
 </script>
