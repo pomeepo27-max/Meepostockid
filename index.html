@@ -590,6 +590,59 @@
   }
   .toast.show{ opacity: 1; }
 
+  .side-notif-container{
+    position: fixed;
+    top: 90px;
+    right: 14px;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 300px;
+    pointer-events: none;
+  }
+  .side-notif{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--ok);
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: 0 8px 28px rgba(30,10,40,0.22);
+    pointer-events: auto;
+    animation: slideInNotif .3s ease;
+  }
+  .side-notif.side-notif-hide{
+    animation: slideOutNotif .35s ease forwards;
+  }
+  .side-notif-title{
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ok);
+    margin-bottom: 4px;
+  }
+  .side-notif-body{
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text);
+  }
+  .side-notif-time{
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  @keyframes slideInNotif{
+    from{ opacity: 0; transform: translateX(30px); }
+    to{ opacity: 1; transform: translateX(0); }
+  }
+  @keyframes slideOutNotif{
+    from{ opacity: 1; transform: translateX(0); }
+    to{ opacity: 0; transform: translateX(30px); }
+  }
+  @media (max-width: 480px){
+    .side-notif-container{ left: 14px; right: 14px; max-width: none; top: 80px; }
+  }
+
   @media (max-width: 480px){
     .stats{ grid-template-columns: repeat(2,1fr); }
   }
@@ -664,15 +717,13 @@
       <datalist id="serviceList"></datalist>
       <div id="presetChips" class="chips"></div>
     </div>
-    <div class="field-row">
-      <div class="field">
-        <label>ແພັກເກັດ</label>
-        <input id="f-package" placeholder="ຕົວຢ່າງ: Premium 4K, ຄອບຄົວ">
-      </div>
-      <div class="field">
-        <label>ໄອດີ / ອີເມວ</label>
-        <input id="f-account" placeholder="[email protected]">
-      </div>
+    <div class="field">
+      <label>ແພັກເກັດ</label>
+      <input id="f-package" placeholder="ຕົວຢ່າງ: Premium 4K, ຄອບຄົວ">
+    </div>
+    <div class="field">
+      <label>ໄອດີ / ອີເມວ</label>
+      <input id="f-account" placeholder="[email protected]">
     </div>
     <div class="field">
       <label>ລະຫັດຜ່ານ</label>
@@ -722,11 +773,12 @@
   <div class="sheet">
     <h2 id="claimTitle">ເລືອກໄອດີ</h2>
     <select id="claimSort" style="width:100%; margin-bottom:12px;">
+      <option value="oldest">ເພີ່ມກ່ອນຢູ່ເທິງສຸດ (ເກົ່າສຸດກ່ອນ)</option>
+      <option value="newest">ເພີ່ມລ່າສຸດຢູ່ເທິງສຸດ</option>
       <option value="expiry_asc">ໝົດອາຍຸໄວສຸດກ່ອນ</option>
       <option value="expiry_desc">ໝົດອາຍຸຊ້າສຸດກ່ອນ</option>
       <option value="price_asc">ລາຄາຕ່ຳ → ສູງ</option>
       <option value="price_desc">ລາຄາສູງ → ຕ່ຳ</option>
-      <option value="newest">ເພີ່ມລ່າສຸດກ່ອນ</option>
       <option value="package_az">ແພັກເກັດ A → Z</option>
     </select>
     <div id="claimList"></div>
@@ -807,6 +859,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div id="sideNotifications" class="side-notif-container"></div>
 
 <script>
 const STORAGE_KEY = 'stock-items';
@@ -923,6 +976,9 @@ const itemsDocRef = db.collection('meepo_store').doc('items');
 const logDocRef = db.collection('meepo_store').doc('activity_log');
 let firestoreReady = false;
 
+let lastSeenClaimTs = 0;
+let logSnapshotInitialized = false;
+
 function loadItems(){
   itemsDocRef.onSnapshot((doc)=>{
     items = (doc.exists && Array.isArray(doc.data().list)) ? doc.data().list : [];
@@ -934,11 +990,40 @@ function loadItems(){
   });
 
   logDocRef.onSnapshot((doc)=>{
-    activityLog = (doc.exists && Array.isArray(doc.data().list)) ? doc.data().list : [];
+    const newLog = (doc.exists && Array.isArray(doc.data().list)) ? doc.data().list : [];
+
+    if(logSnapshotInitialized){
+      const newClaims = newLog.filter(h => h.type === 'claim' && h.ts > lastSeenClaimTs);
+      newClaims.sort((a,b)=>a.ts-b.ts).forEach(h => showSideNotification(h));
+    }
+    if(newLog.length > 0){
+      lastSeenClaimTs = Math.max(lastSeenClaimTs, ...newLog.filter(h=>h.type==='claim').map(h=>h.ts));
+    }
+    logSnapshotInitialized = true;
+
+    activityLog = newLog;
     renderAll();
   }, (err)=>{
     console.error('Firestore log error:', err);
   });
+}
+
+function showSideNotification(h){
+  const container = document.getElementById('sideNotifications');
+  const color = getServiceColor(h.service);
+  const el = document.createElement('div');
+  el.className = 'side-notif';
+  el.style.borderLeftColor = color;
+  el.innerHTML = `
+    <div class="side-notif-title">🛒 ໄອດີຖືກຮັບໄປແລ້ວ</div>
+    <div class="side-notif-body">${escapeHtml(h.service||'-')}${h.package ? ' · '+escapeHtml(h.package) : ''}</div>
+    <div class="side-notif-time">${formatRelativeDateTime(h.ts)}</div>
+  `;
+  container.appendChild(el);
+  setTimeout(()=>{
+    el.classList.add('side-notif-hide');
+    setTimeout(()=> el.remove(), 400);
+  }, 6000);
 }
 
 async function saveItems(){
@@ -1342,6 +1427,12 @@ function sortAvailItems(avail, sortMode){
         const db = b.expiry ? new Date(b.expiry).getTime() : -Infinity;
         return db - da;
       });
+    case 'expiry_asc':
+      return arr.sort((a,b)=>{
+        const da = a.expiry ? new Date(a.expiry).getTime() : Infinity;
+        const db = b.expiry ? new Date(b.expiry).getTime() : Infinity;
+        return da - db;
+      });
     case 'price_asc':
       return arr.sort((a,b)=>(a.price ?? Infinity) - (b.price ?? Infinity));
     case 'price_desc':
@@ -1350,21 +1441,25 @@ function sortAvailItems(avail, sortMode){
       return arr.sort((a,b)=>(b.createdAt||0) - (a.createdAt||0));
     case 'package_az':
       return arr.sort((a,b)=>(a.package||'').localeCompare(b.package||''));
-    case 'expiry_asc':
+    case 'oldest':
     default:
-      return arr.sort((a,b)=>{
-        const da = a.expiry ? new Date(a.expiry).getTime() : Infinity;
-        const db = b.expiry ? new Date(b.expiry).getTime() : Infinity;
-        return da - db;
-      });
+      return arr.sort((a,b)=>(a.createdAt||0) - (b.createdAt||0));
   }
 }
 
 function openClaimList(service){
   currentClaimService = service;
-  document.getElementById('claimSort').value = 'expiry_asc';
+  document.getElementById('claimSort').value = 'oldest';
   renderClaimList();
   document.getElementById('claimOverlay').classList.add('open');
+}
+
+function getPackageDuration(pkg){
+  if(!pkg) return null;
+  const m = String(pkg).match(/(\d+)\s*(d|day|days|ມື້|ວັນ|วัน)/i);
+  if(!m) return null;
+  const n = parseInt(m[1], 10);
+  return [7, 30, 90, 365].includes(n) ? n : null;
 }
 
 function renderClaimList(){
@@ -1379,20 +1474,35 @@ function renderClaimList(){
   if(avail.length === 0){
     list.innerHTML = '<div style="color:var(--muted); padding:10px 0;">ບໍ່ມີໄອດີຫວ່າງສຳລັບແອັບນີ້ແລ້ວ</div>';
   } else {
-    list.innerHTML = avail.map(it=>{
-      const du = daysUntil(it.expiry);
-      let expText = it.expiry ? 'ໝົດອາຍຸ '+formatDateOnly(it.expiry) : 'ບໍ່ລະບຸວັນໝົດອາຍຸ';
-      if(du !== null && du <= 3 && du >= 0){ expText = `<span style="color:var(--warn); font-weight:600;">ເຫຼືອອີກ ${du} ວັນ</span>`; }
-      else if(du !== null && du < 0){ expText = `<span style="color:var(--danger); font-weight:600;">ໝົດອາຍຸແລ້ວ</span>`; }
-      return `
-        <div class="claim-item">
-          <div>
-            <div class="pkg">${escapeHtml(it.package || 'ແພັກເກັດມາດຕະຖານ')}</div>
-            <div class="exp">${expText}${it.price ? ' · '+it.price+' ກີບ' : ''}</div>
-          </div>
-          <button class="btn small" data-claim="${it.id}">ຮັບໄອດີນີ້</button>
-        </div>`;
-    }).join('');
+    const durationOrder = [7, 30, 90, 365, 'other'];
+    const durationLabel = { 7:'7 ວັນ', 30:'30 ວັນ', 90:'90 ວັນ', 365:'365 ວັນ', other:'ອື່ນໆ' };
+    const buckets = {};
+    avail.forEach(it=>{
+      const d = getPackageDuration(it.package) || 'other';
+      if(!buckets[d]) buckets[d] = [];
+      buckets[d].push(it);
+    });
+
+    let html = '';
+    durationOrder.forEach(d=>{
+      if(!buckets[d] || buckets[d].length === 0) return;
+      html += `<div class="tile-group-label">${durationLabel[d]} (${buckets[d].length})</div>`;
+      html += buckets[d].map(it=>{
+        const du = daysUntil(it.expiry);
+        let expText = it.expiry ? 'ໝົດອາຍຸ '+formatDateOnly(it.expiry) : 'ບໍ່ລະບຸວັນໝົດອາຍຸ';
+        if(du !== null && du <= 3 && du >= 0){ expText = `<span style="color:var(--warn); font-weight:600;">ເຫຼືອອີກ ${du} ວັນ</span>`; }
+        else if(du !== null && du < 0){ expText = `<span style="color:var(--danger); font-weight:600;">ໝົດອາຍຸແລ້ວ</span>`; }
+        return `
+          <div class="claim-item">
+            <div>
+              <div class="pkg">${escapeHtml(it.package || 'ແພັກເກັດມາດຕະຖານ')}</div>
+              <div class="exp">${expText}${it.price ? ' · '+it.price+' ກີບ' : ''}</div>
+            </div>
+            <button class="btn small" data-claim="${it.id}">ຮັບໄອດີນີ້</button>
+          </div>`;
+      }).join('');
+    });
+    list.innerHTML = html;
   }
 
   list.querySelectorAll('[data-claim]').forEach(btn=>{
