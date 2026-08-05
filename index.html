@@ -12,6 +12,7 @@
 <!-- ============================================================ -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script>
   const firebaseConfig = {
     apiKey: "AIzaSyDzAIP_nZB4RuAmtt-EfXc3zalYc-e_YdI",
@@ -23,6 +24,7 @@
   };
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
+  const auth = firebase.auth();
 </script>
 <!-- ============================================================ -->
 
@@ -590,6 +592,34 @@
   }
   .toast.show{ opacity: 1; }
 
+  .pagination-row{
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+  .page-btn{
+    min-width: 34px;
+    height: 34px;
+    padding: 0 8px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .page-btn:hover{ border-color: var(--accent); }
+  .page-btn.active{
+    background: var(--gradient);
+    color: #140a10;
+    border-color: transparent;
+  }
+  .page-btn:disabled{ opacity: 0.35; cursor: not-allowed; }
+
   .side-notif-container{
     position: fixed;
     top: 90px;
@@ -649,6 +679,25 @@
 </style>
 </head>
 <body>
+
+<div id="loginGate" style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;">
+  <div style="max-width:380px; width:100%; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:28px 24px; box-shadow:0 8px 30px rgba(30,10,40,0.12);">
+    <div class="brand-mark" style="margin-bottom:4px;"><span class="meepo-word">Meepo</span><span> Premium</span></div>
+    <p style="color:var(--muted); font-size:13px; margin:0 0 20px;">ເຂົ້າສູ່ລະບົບເພື່ອໃຊ້ງານ</p>
+    <div class="field">
+      <label>ອີເມວ</label>
+      <input id="login-email" type="email" placeholder="[email protected]">
+    </div>
+    <div class="field">
+      <label>ລະຫັດຜ່ານ</label>
+      <input id="login-password" type="password" placeholder="ລະຫັດຜ່ານ">
+    </div>
+    <div id="loginError" style="color:var(--danger); font-size:12px; display:none; margin-bottom:10px;">ອີເມວ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ</div>
+    <button class="btn" id="loginSubmitBtn" style="width:100%;">ເຂົ້າສູ່ລະບົບ</button>
+  </div>
+</div>
+
+<div id="appContent" style="display:none;">
 
 <header>
   <div class="header-row">
@@ -809,8 +858,16 @@
         <option value="edit">ແກ້ໄຂສິນຄ້າ</option>
         <option value="delete">ລຶບສິນຄ້າ</option>
       </select>
+      <select id="historyDateFilter">
+        <option value="">ທຸກວັນ</option>
+        <option value="today">ມື້ນີ້</option>
+        <option value="yesterday">ມື້ວານນີ້</option>
+        <option value="last7">7 ວັນທີ່ຜ່ານມາ</option>
+        <option value="last30">30 ວັນທີ່ຜ່ານມາ</option>
+      </select>
     </div>
     <div id="historyList"></div>
+    <div id="historyPagination" class="pagination-row"></div>
     <div class="sheet-actions">
       <button class="btn ghost" id="historyCloseBtn">ປິດ</button>
     </div>
@@ -1087,17 +1144,44 @@ const HISTORY_LABELS = {
   delete: { label: 'ລຶບສິນຄ້າ', verb: 'ລຶບສິນຄ້ານີ້ອອກຈາກສະຕັອກ' },
 };
 
+const HISTORY_PAGE_SIZE = 8;
+let historyPage = 1;
+
+function matchesDateFilter(ts, dateFilter){
+  if(!dateFilter) return true;
+  const d = new Date(ts);
+  const now = new Date();
+  const startOfDay = (date)=> new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
+  if(dateFilter === 'today') return diffDays === 0;
+  if(dateFilter === 'yesterday') return diffDays === 1;
+  if(dateFilter === 'last7') return diffDays >= 0 && diffDays <= 6;
+  if(dateFilter === 'last30') return diffDays >= 0 && diffDays <= 29;
+  return true;
+}
+
 function renderHistory(){
   const filter = document.getElementById('historyFilter').value;
+  const dateFilter = document.getElementById('historyDateFilter').value;
   const list = document.getElementById('historyList');
-  const filtered = filter ? activityLog.filter(h=>h.type===filter) : activityLog;
+  const pagination = document.getElementById('historyPagination');
+
+  let filtered = filter ? activityLog.filter(h=>h.type===filter) : activityLog.slice();
+  filtered = filtered.filter(h=>matchesDateFilter(h.ts, dateFilter));
 
   if(filtered.length === 0){
     list.innerHTML = '<div style="color:var(--muted); padding:16px 0; text-align:center;">ຍັງບໍ່ມີປະຫວັດ</div>';
+    pagination.innerHTML = '';
     return;
   }
 
-  list.innerHTML = filtered.map(h=>{
+  const totalPages = Math.max(1, Math.ceil(filtered.length / HISTORY_PAGE_SIZE));
+  if(historyPage > totalPages) historyPage = totalPages;
+  if(historyPage < 1) historyPage = 1;
+  const startIdx = (historyPage - 1) * HISTORY_PAGE_SIZE;
+  const pageItems = filtered.slice(startIdx, startIdx + HISTORY_PAGE_SIZE);
+
+  list.innerHTML = pageItems.map(h=>{
     const meta = HISTORY_LABELS[h.type] || { label: h.type, verb: '' };
     const isClaim = h.type === 'claim';
     return `
@@ -1135,6 +1219,31 @@ function renderHistory(){
       if(!h) return;
       const combined = `ໄອດີ: ${h.account||'-'}\nລະຫັດ: ${h.password||'-'}`+(h.note ? `\nໂນ໊ດ: ${h.note}` : '');
       copyToClipboard(combined);
+    });
+  });
+
+  renderHistoryPagination(totalPages);
+}
+
+function renderHistoryPagination(totalPages){
+  const pagination = document.getElementById('historyPagination');
+  if(totalPages <= 1){ pagination.innerHTML = ''; return; }
+
+  let html = `<button class="page-btn" data-page="${historyPage-1}" ${historyPage<=1?'disabled':''}>‹</button>`;
+  for(let p=1; p<=totalPages; p++){
+    if(p===1 || p===totalPages || Math.abs(p-historyPage)<=1){
+      html += `<button class="page-btn ${p===historyPage?'active':''}" data-page="${p}">${p}</button>`;
+    } else if(p===historyPage-2 || p===historyPage+2){
+      html += `<span style="color:var(--muted); padding:0 4px;">…</span>`;
+    }
+  }
+  html += `<button class="page-btn" data-page="${historyPage+1}" ${historyPage>=totalPages?'disabled':''}>›</button>`;
+  pagination.innerHTML = html;
+
+  pagination.querySelectorAll('[data-page]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      historyPage = parseInt(btn.getAttribute('data-page'), 10);
+      renderHistory();
     });
   });
 }
@@ -1497,6 +1606,7 @@ function renderClaimList(){
             <div>
               <div class="pkg">${escapeHtml(it.package || 'ແພັກເກັດມາດຕະຖານ')}</div>
               <div class="exp">${expText}${it.price ? ' · '+it.price+' ກີບ' : ''}</div>
+              <div class="exp" style="margin-top:2px;">📥 ເພີ່ມເຂົ້າ ${formatRelativeDateTime(it.createdAt)}</div>
             </div>
             <button class="btn small" data-claim="${it.id}">ຮັບໄອດີນີ້</button>
           </div>`;
@@ -1672,19 +1782,24 @@ document.getElementById('search').addEventListener('input', renderAll);
 document.getElementById('filter-status').addEventListener('change', renderAll);
 document.getElementById('historyBtn').addEventListener('click', ()=>{
   document.getElementById('historyTitle').textContent = 'ປະຫວັດການຊື້/ແກ້ໄຂ';
-  document.getElementById('historyFilterWrap').style.display = '';
+  document.getElementById('historyFilter').style.display = '';
   document.getElementById('historyFilter').value = '';
+  document.getElementById('historyDateFilter').value = '';
+  historyPage = 1;
   renderHistory();
   document.getElementById('historyOverlay').classList.add('open');
 });
 document.getElementById('employeeHistoryBtn').addEventListener('click', ()=>{
   document.getElementById('historyTitle').textContent = 'ປະຫວັດການຮັບໄອດີ';
-  document.getElementById('historyFilterWrap').style.display = 'none';
+  document.getElementById('historyFilter').style.display = 'none';
   document.getElementById('historyFilter').value = 'claim';
+  document.getElementById('historyDateFilter').value = '';
+  historyPage = 1;
   renderHistory();
   document.getElementById('historyOverlay').classList.add('open');
 });
-document.getElementById('historyFilter').addEventListener('change', renderHistory);
+document.getElementById('historyFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
+document.getElementById('historyDateFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
 document.getElementById('historyCloseBtn').addEventListener('click', ()=> document.getElementById('historyOverlay').classList.remove('open'));
 document.getElementById('historyOverlay').addEventListener('click', (e)=>{ if(e.target.id==='historyOverlay') e.currentTarget.classList.remove('open'); });
 
@@ -1779,8 +1894,40 @@ document.getElementById('darkModeToggle').addEventListener('click', ()=>{
 });
 
 initDarkMode();
-renderPresetChips();
-loadItems();
+
+// ============================================================
+// AUTH GATE — ຕ້ອງລ໊ອກອິນກ່ອນຈຶ່ງຈະໃຊ້ງານແອັບ ແລະ ເຂົ້າເຖິງ Firestore ໄດ້
+// ============================================================
+function showApp(){
+  document.getElementById('loginGate').style.display = 'none';
+  document.getElementById('appContent').style.display = '';
+  renderPresetChips();
+  loadItems();
+}
+
+function showLoginGate(){
+  document.getElementById('loginGate').style.display = 'flex';
+  document.getElementById('appContent').style.display = 'none';
+}
+
+auth.onAuthStateChanged((user)=>{
+  if(user){ showApp(); }
+  else{ showLoginGate(); }
+});
+
+function tryLogin(){
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  document.getElementById('loginError').style.display = 'none';
+  auth.signInWithEmailAndPassword(email, password).catch((err)=>{
+    console.error(err);
+    document.getElementById('loginError').style.display = 'block';
+  });
+}
+document.getElementById('loginSubmitBtn').addEventListener('click', tryLogin);
+document.getElementById('login-password').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') tryLogin(); });
+document.getElementById('login-email').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') tryLogin(); });
 </script>
+</div>
 </body>
 </html>
