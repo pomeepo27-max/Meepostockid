@@ -25,6 +25,7 @@
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
   const auth = firebase.auth();
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch((e)=>console.error('Auth persistence error:', e));
 </script>
 <!-- ============================================================ -->
 
@@ -177,6 +178,15 @@
     flex-shrink: 0;
   }
   .tile-group-label:first-child{ margin-top: 0; }
+  .duration-sub-label{
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--muted);
+    margin: 12px 0 8px 8px;
+    padding-left: 10px;
+    border-left: 2px solid var(--accent-2);
+  }
   .tile{
     background: var(--panel);
     border: 1px solid var(--line);
@@ -747,11 +757,13 @@
 
   <div class="chip-filter-row" id="serviceChips"></div>
 
+  <div id="stockPaginationTop" class="pagination-row"></div>
   <div id="list" class="grid"></div>
   <div id="empty" class="empty" style="display:none;">
     <div class="big">ຍັງບໍ່ມີໄອດີໃນສະຕັອກ</div>
     ກົດປຸ່ມ + ດ້ານລຸ່ມເພື່ອເພີ່ມໄອດີທຳອິດຂອງທ່ານ
   </div>
+  <div id="stockPaginationBottom" class="pagination-row"></div>
   </div>
 </main>
 
@@ -850,6 +862,9 @@
 <div class="overlay" id="historyOverlay">
   <div class="sheet">
     <h2 id="historyTitle">ປະຫວັດການຊື້/ແກ້ໄຂ</h2>
+    <select id="historyServiceFilter" style="width:100%; margin-bottom:10px;">
+      <option value="">ທຸກແອັບ</option>
+    </select>
     <div class="toolbar" id="historyFilterWrap" style="margin-bottom:10px;">
       <select id="historyFilter">
         <option value="">ທຸກປະເພດ</option>
@@ -1146,6 +1161,8 @@ const HISTORY_LABELS = {
 
 const HISTORY_PAGE_SIZE = 8;
 let historyPage = 1;
+const STOCK_PAGE_SIZE = 10;
+let stockPage = 1;
 
 function matchesDateFilter(ts, dateFilter){
   if(!dateFilter) return true;
@@ -1160,14 +1177,43 @@ function matchesDateFilter(ts, dateFilter){
   return true;
 }
 
+function populateHistoryServiceFilter(){
+  const sel = document.getElementById('historyServiceFilter');
+  const current = sel.value;
+  const servicesInLog = [...new Set(activityLog.map(h=>h.service).filter(Boolean))];
+
+  const groupOrder = PRESET_APPS.map(g=>g.group).concat(['ອື່ນໆ']);
+  const buckets = {};
+  servicesInLog.forEach(s=>{
+    const cat = getServiceCategory(s);
+    if(!buckets[cat]) buckets[cat] = [];
+    buckets[cat].push(s);
+  });
+  Object.values(buckets).forEach(arr=>arr.sort((a,b)=>a.localeCompare(b)));
+
+  let optionsHtml = '<option value="">ທຸກແອັບ</option>';
+  groupOrder.forEach(cat=>{
+    if(!buckets[cat] || buckets[cat].length === 0) return;
+    optionsHtml += `<optgroup label="${escapeHtml(cat)}">`;
+    optionsHtml += buckets[cat].map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+    optionsHtml += `</optgroup>`;
+  });
+  sel.innerHTML = optionsHtml;
+  sel.value = current;
+}
+
 function renderHistory(){
   const filter = document.getElementById('historyFilter').value;
   const dateFilter = document.getElementById('historyDateFilter').value;
+  const serviceFilter = document.getElementById('historyServiceFilter').value;
   const list = document.getElementById('historyList');
   const pagination = document.getElementById('historyPagination');
 
+  populateHistoryServiceFilter();
+
   let filtered = filter ? activityLog.filter(h=>h.type===filter) : activityLog.slice();
   filtered = filtered.filter(h=>matchesDateFilter(h.ts, dateFilter));
+  if(serviceFilter) filtered = filtered.filter(h=>h.service===serviceFilter);
 
   if(filtered.length === 0){
     list.innerHTML = '<div style="color:var(--muted); padding:16px 0; text-align:center;">ຍັງບໍ່ມີປະຫວັດ</div>';
@@ -1223,6 +1269,39 @@ function renderHistory(){
   });
 
   renderHistoryPagination(totalPages);
+}
+
+function buildPaginationHtml(page, totalPages){
+  let html = `<button class="page-btn" data-page="${page-1}" ${page<=1?'disabled':''}>‹</button>`;
+  for(let p=1; p<=totalPages; p++){
+    if(p===1 || p===totalPages || Math.abs(p-page)<=1){
+      html += `<button class="page-btn ${p===page?'active':''}" data-page="${p}">${p}</button>`;
+    } else if(p===page-2 || p===page+2){
+      html += `<span style="color:var(--muted); padding:0 4px;">…</span>`;
+    }
+  }
+  html += `<button class="page-btn" data-page="${page+1}" ${page>=totalPages?'disabled':''}>›</button>`;
+  return html;
+}
+
+function renderStockPagination(totalPages){
+  const topEl = document.getElementById('stockPaginationTop');
+  const bottomEl = document.getElementById('stockPaginationBottom');
+  if(totalPages <= 1){ topEl.innerHTML = ''; bottomEl.innerHTML = ''; return; }
+
+  const html = buildPaginationHtml(stockPage, totalPages);
+  topEl.innerHTML = html;
+  bottomEl.innerHTML = html;
+
+  [topEl, bottomEl].forEach(container=>{
+    container.querySelectorAll('[data-page]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        stockPage = parseInt(btn.getAttribute('data-page'), 10);
+        render();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+  });
 }
 
 function renderHistoryPagination(totalPages){
@@ -1305,6 +1384,7 @@ function updateServiceFilter(){
   chipRow.querySelectorAll('[data-chip]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       selectedServiceFilter = btn.getAttribute('data-chip');
+      stockPage = 1;
       renderAll();
     });
   });
@@ -1347,18 +1427,30 @@ function render(){
   if(filtered.length === 0){
     empty.style.display = 'block';
     empty.querySelector('.big').textContent = items.length === 0 ? 'ຍັງບໍ່ມີໄອດີໃນສະຕັອກ' : 'ບໍ່ພົບລາຍການທີ່ຄົ້ນຫາ';
+    document.getElementById('stockPaginationTop').innerHTML = '';
+    document.getElementById('stockPaginationBottom').innerHTML = '';
   } else {
     empty.style.display = 'none';
   }
 
-  // ຈັດກຸ່ມລາຍການຕາມໝວດໝູ່ (ຮັກສາລຳດັບການຮຽງຕາມວັນໝົດອາຍຸພາຍໃນແຕ່ລະໝວດ)
+  // ແບ່ງໜ້າ (pagination) ກ່ອນ ແລ້ວຄ່ອຍຈັດກຸ່ມສະເພາະລາຍການໃນໜ້ານີ້
+  const totalStockPages = Math.max(1, Math.ceil(filtered.length / STOCK_PAGE_SIZE));
+  if(stockPage > totalStockPages) stockPage = totalStockPages;
+  if(stockPage < 1) stockPage = 1;
+  const stockStartIdx = (stockPage - 1) * STOCK_PAGE_SIZE;
+  const pageItems = filtered.slice(stockStartIdx, stockStartIdx + STOCK_PAGE_SIZE);
+
+  // ຈັດກຸ່ມລາຍການ (ໃນໜ້ານີ້) ຕາມໝວດໝູ່ (ຮັກສາລຳດັບການຮຽງຕາມວັນໝົດອາຍຸພາຍໃນແຕ່ລະໝວດ)
   const groupOrder = PRESET_APPS.map(g=>g.group).concat(['ອື່ນໆ']);
   const buckets = {};
-  filtered.forEach(it=>{
+  pageItems.forEach(it=>{
     const cat = getServiceCategory(it.service);
     if(!buckets[cat]) buckets[cat] = [];
     buckets[cat].push(it);
   });
+
+  const durationOrder = [7, 30, 90, 365, 'other'];
+  const durationLabel = { 7:'7 ວັນ', 30:'30 ວັນ', 90:'90 ວັນ', 365:'1 ປີ (365 ວັນ)', other:'ອື່ນໆ' };
 
   groupOrder.forEach(cat=>{
     if(!buckets[cat] || buckets[cat].length === 0) return;
@@ -1367,7 +1459,22 @@ function render(){
     label.textContent = `${cat} (${buckets[cat].length} ລາຍການ)`;
     list.appendChild(label);
 
+    // ຈັດກຸ່ມຍ່ອຍຕາມໄລຍະເວລາ (7/30/90/365 ວັນ)
+    const durBuckets = {};
     buckets[cat].forEach(it=>{
+      const d = getPackageDuration(it.package) || 'other';
+      if(!durBuckets[d]) durBuckets[d] = [];
+      durBuckets[d].push(it);
+    });
+
+    durationOrder.forEach(d=>{
+      if(!durBuckets[d] || durBuckets[d].length === 0) return;
+      const durLabel = document.createElement('div');
+      durLabel.className = 'duration-sub-label';
+      durLabel.textContent = `${durationLabel[d]} (${durBuckets[d].length})`;
+      list.appendChild(durLabel);
+
+      durBuckets[d].forEach(it=>{
     const card = document.createElement('div');
     card.className = 'card';
     const du = daysUntil(it.expiry);
@@ -1420,8 +1527,13 @@ function render(){
       </div>
     `;
     list.appendChild(card);
+      });
     });
   });
+
+  if(filtered.length > 0){
+    renderStockPagination(totalStockPages);
+  }
 
   document.getElementById('stat-total').textContent = items.length;
   document.getElementById('stat-available').textContent = items.filter(i=>i.status==='available').length;
@@ -1778,13 +1890,14 @@ document.getElementById('addBtn').addEventListener('click', ()=>openSheet(null))
 document.getElementById('cancelBtn').addEventListener('click', closeSheet);
 document.getElementById('saveBtn').addEventListener('click', saveForm);
 document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeSheet(); });
-document.getElementById('search').addEventListener('input', renderAll);
-document.getElementById('filter-status').addEventListener('change', renderAll);
+document.getElementById('search').addEventListener('input', ()=>{ stockPage = 1; renderAll(); });
+document.getElementById('filter-status').addEventListener('change', ()=>{ stockPage = 1; renderAll(); });
 document.getElementById('historyBtn').addEventListener('click', ()=>{
   document.getElementById('historyTitle').textContent = 'ປະຫວັດການຊື້/ແກ້ໄຂ';
   document.getElementById('historyFilter').style.display = '';
   document.getElementById('historyFilter').value = '';
   document.getElementById('historyDateFilter').value = '';
+  document.getElementById('historyServiceFilter').value = '';
   historyPage = 1;
   renderHistory();
   document.getElementById('historyOverlay').classList.add('open');
@@ -1794,12 +1907,14 @@ document.getElementById('employeeHistoryBtn').addEventListener('click', ()=>{
   document.getElementById('historyFilter').style.display = 'none';
   document.getElementById('historyFilter').value = 'claim';
   document.getElementById('historyDateFilter').value = '';
+  document.getElementById('historyServiceFilter').value = '';
   historyPage = 1;
   renderHistory();
   document.getElementById('historyOverlay').classList.add('open');
 });
 document.getElementById('historyFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
 document.getElementById('historyDateFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
+document.getElementById('historyServiceFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
 document.getElementById('historyCloseBtn').addEventListener('click', ()=> document.getElementById('historyOverlay').classList.remove('open'));
 document.getElementById('historyOverlay').addEventListener('click', (e)=>{ if(e.target.id==='historyOverlay') e.currentTarget.classList.remove('open'); });
 
