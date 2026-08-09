@@ -756,6 +756,7 @@
   </div>
 
   <div class="chip-filter-row" id="serviceChips"></div>
+  <div class="chip-filter-row" id="durationChips"></div>
 
   <div id="stockPaginationTop" class="pagination-row"></div>
   <div id="list" class="grid"></div>
@@ -937,14 +938,16 @@
 const STORAGE_KEY = 'stock-items';
 const LOG_STORAGE_KEY = 'activity-log';
 let activityLog = [];
-const ADMIN_PASSWORD = '1234'; // ແກ້ລະຫັດຜ່ານແອັດມິນບ່ອນນີ້ໄດ້ເລີຍ
+const ADMIN_PASSWORD = 'suckseed666'; // ແກ້ລະຫັດຜ່ານແອັດມິນບ່ອນນີ້ໄດ້ເລີຍ
 const ORDER_PASSWORD = '0000'; // ລະຫັດຜ່ານທີ່ພະນັກງານຕ້ອງໃສ່ຕອນກົດຮັບໄອດີ ແກ້ບ່ອນນີ້ໄດ້ເລີຍ
 let adminUnlocked = false;
+try{ adminUnlocked = localStorage.getItem('meepo-admin-unlocked') === '1'; }catch(e){ /* ບໍ່ມີສິດເຂົ້າ localStorage */ }
 let pendingClaimId = null;
 let items = [];
 let editingId = null;
 let mode = 'employee';
 let selectedServiceFilter = '';
+let selectedDurationFilter = '';
 
 // ສີສະເພາະສຳລັບແອັບທີ່ພົບເລື້ອຍ ສ່ວນແອັບອື່ນຈະສຸ່ມສີຕາມຊື່ແບບຄົງທີ່
 const SERVICE_COLORS = {
@@ -1227,7 +1230,16 @@ function renderHistory(){
   const startIdx = (historyPage - 1) * HISTORY_PAGE_SIZE;
   const pageItems = filtered.slice(startIdx, startIdx + HISTORY_PAGE_SIZE);
 
-  list.innerHTML = pageItems.map(h=>{
+  const durationOrder = [7, 30, 90, 365, 'other'];
+  const durationLabel = { 7:'7 ວັນ', 30:'30 ວັນ', 90:'90 ວັນ', 365:'1 ປີ (365 ວັນ)', other:'ອື່ນໆ' };
+  const durBuckets = {};
+  pageItems.forEach(h=>{
+    const d = getPackageDuration(h.package) || 'other';
+    if(!durBuckets[d]) durBuckets[d] = [];
+    durBuckets[d].push(h);
+  });
+
+  const renderHistoryCard = (h)=>{
     const meta = HISTORY_LABELS[h.type] || { label: h.type, verb: '' };
     const isClaim = h.type === 'claim';
     return `
@@ -1254,7 +1266,15 @@ function renderHistory(){
         ${h.note ? `<div class="note" style="margin-top:6px;">ໂນ໊ດ: ${escapeHtml(h.note)}</div>` : ''}
         <button class="btn ghost small" data-hcopyall="${escapeHtml(h.id)}" style="width:100%; margin-top:8px;">ກ໊ອບປີ້ທັງໝົດ</button>` : ''}
       </div>`;
-  }).join('');
+  };
+
+  let html = '';
+  durationOrder.forEach(d=>{
+    if(!durBuckets[d] || durBuckets[d].length === 0) return;
+    html += `<div class="duration-sub-label">${durationLabel[d]} (${durBuckets[d].length})</div>`;
+    html += durBuckets[d].map(renderHistoryCard).join('');
+  });
+  list.innerHTML = html;
 
   list.querySelectorAll('[data-hcopy]').forEach(btn=>{
     btn.addEventListener('click', ()=> copyToClipboard(btn.getAttribute('data-hcopy')));
@@ -1391,6 +1411,41 @@ function updateServiceFilter(){
 
   const dl = document.getElementById('serviceList');
   dl.innerHTML = services.map(s=>`<option value="${escapeHtml(s)}">`).join('');
+
+  renderDurationChips();
+}
+
+const DURATION_CHIP_COLORS = { '7':'#00b3a0', '30':'#7c5cff', '90':'#ff5fa2', '365':'#e08a1e', 'other':'#756c8c' };
+const DURATION_CHIP_LABELS = { '7':'7 ວັນ', '30':'30 ວັນ', '90':'90 ວັນ', '365':'1 ປີ', 'other':'ອື່ນໆ' };
+
+function renderDurationChips(){
+  const chipRow = document.getElementById('durationChips');
+  const durationOrder = ['7', '30', '90', '365', 'other'];
+
+  let chipsHtml = `
+    <button type="button" class="filter-chip all ${selectedDurationFilter===''?'active':''}" data-durchip="">
+      ທັງໝົດ <span class="count"><span>${items.length}</span></span>
+    </button>`;
+  chipsHtml += durationOrder.map(d=>{
+    const count = items.filter(i=>String(getPackageDuration(i.package) || 'other')===d).length;
+    if(count === 0) return '';
+    const color = DURATION_CHIP_COLORS[d];
+    const isActive = selectedDurationFilter===d;
+    return `
+      <button type="button" class="filter-chip ${isActive?'active':''}" data-durchip="${d}" style="color:${color};">
+        <span class="dot" style="background:${color};"></span>${DURATION_CHIP_LABELS[d]}
+        <span class="count" style="background:${color};"><span>${count}</span></span>
+      </button>`;
+  }).join('');
+  chipRow.innerHTML = chipsHtml;
+
+  chipRow.querySelectorAll('[data-durchip]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      selectedDurationFilter = btn.getAttribute('data-durchip');
+      stockPage = 1;
+      renderAll();
+    });
+  });
 }
 
 function escapeHtml(str){
@@ -1402,10 +1457,15 @@ function render(){
   const search = document.getElementById('search').value.trim().toLowerCase();
   const fService = selectedServiceFilter;
   const fStatus = document.getElementById('filter-status').value;
+  const fDuration = selectedDurationFilter;
 
   let filtered = items.filter(it=>{
     if(fService && it.service !== fService) return false;
     if(fStatus && it.status !== fStatus) return false;
+    if(fDuration){
+      const d = getPackageDuration(it.package) || 'other';
+      if(String(d) !== fDuration) return false;
+    }
     if(search){
       const hay = [it.service, it.account, it.customer, it.package, it.note].join(' ').toLowerCase();
       if(!hay.includes(search)) return false;
@@ -1973,6 +2033,7 @@ function tryAdminLogin(){
   const val = document.getElementById('f-admin-pass').value;
   if(val === ADMIN_PASSWORD){
     adminUnlocked = true;
+    try{ localStorage.setItem('meepo-admin-unlocked', '1'); }catch(e){ /* ບໍ່ມີສິດເຂົ້າ localStorage */ }
     document.getElementById('adminAuthOverlay').classList.remove('open');
     switchMode('admin');
   } else {
