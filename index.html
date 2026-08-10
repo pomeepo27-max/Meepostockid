@@ -916,6 +916,17 @@
   </div>
 </div>
 
+<div class="overlay" id="claimConfirmOverlay">
+  <div class="sheet">
+    <h2>ຢືນຢັນຮັບໄອດີນີ້ບໍ່?</h2>
+    <p style="color:var(--muted); font-size:13px;">ໄອດີຈະຖືກຕັດອອກຈາກສະຕັອກທັນທີ</p>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="claimConfirmCancelBtn">ຍົກເລີກ</button>
+      <button class="btn" id="claimConfirmOkBtn">ຢືນຢັນ</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="adminAuthOverlay">
   <div class="sheet">
     <h2>ໃສ່ລະຫັດຜ່ານແອັດມິນ</h2>
@@ -1795,9 +1806,13 @@ function renderClaimList(){
 function requestClaim(id){
   pendingClaimId = id;
   document.getElementById('claimOverlay').classList.remove('open');
-  document.getElementById('f-order-pass').value = '';
-  document.getElementById('orderAuthError').style.display = 'none';
-  document.getElementById('orderAuthOverlay').classList.add('open');
+  if(adminUnlocked){
+    document.getElementById('claimConfirmOverlay').classList.add('open');
+  } else {
+    document.getElementById('f-order-pass').value = '';
+    document.getElementById('orderAuthError').style.display = 'none';
+    document.getElementById('orderAuthOverlay').classList.add('open');
+  }
 }
 
 async function claimItem(id){
@@ -2013,6 +2028,18 @@ function tryOrderAuth(){
 }
 document.getElementById('orderAuthSubmitBtn').addEventListener('click', tryOrderAuth);
 document.getElementById('f-order-pass').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') tryOrderAuth(); });
+
+document.getElementById('claimConfirmCancelBtn').addEventListener('click', ()=>{
+  document.getElementById('claimConfirmOverlay').classList.remove('open');
+  pendingClaimId = null;
+});
+document.getElementById('claimConfirmOverlay').addEventListener('click', (e)=>{ if(e.target.id==='claimConfirmOverlay'){ e.currentTarget.classList.remove('open'); pendingClaimId = null; } });
+document.getElementById('claimConfirmOkBtn').addEventListener('click', ()=>{
+  document.getElementById('claimConfirmOverlay').classList.remove('open');
+  const id = pendingClaimId;
+  pendingClaimId = null;
+  if(id) claimItem(id);
+});
 
 document.getElementById('modeToggle').addEventListener('click', ()=>{
   if(mode === 'employee'){
