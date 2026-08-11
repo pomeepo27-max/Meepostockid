@@ -489,6 +489,77 @@
   @keyframes otpSpin{
     to{ transform: rotate(360deg); }
   }
+
+  .netflix-tool-sheet{
+    background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+  }
+  .netflix-tool-header{
+    display:flex;
+    align-items:center;
+    gap: 12px;
+    margin-bottom: 18px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .netflix-tool-icon{
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #e50914, #b0060f);
+    color: #fff;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 22px;
+    flex-shrink: 0;
+    box-shadow: 0 4px 14px rgba(229,9,20,0.35);
+  }
+  .otp-type-tabs{
+    display:flex;
+    gap: 8px;
+  }
+  .otp-type-tab{
+    flex: 1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 4px;
+    padding: 10px 6px;
+    border-radius: 10px;
+    border: 1.5px solid var(--line);
+    background: var(--panel-2);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align:center;
+  }
+  .otp-type-tab span{ line-height: 1.2; }
+  .otp-type-tab.active{
+    border-color: transparent;
+    background: var(--gradient);
+    color: #140a10;
+  }
+  .netflix-link-box{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .netflix-link-box .link-text{
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: var(--panel);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
   .otp-input{
     flex: 1;
     background: var(--panel);
@@ -974,13 +1045,27 @@
 </div>
 
 <div class="overlay" id="otpLookupOverlay">
-  <div class="sheet">
-    <h2>🔑 ດຶງລະຫັດ OTP Netflix</h2>
+  <div class="sheet netflix-tool-sheet">
+    <div class="netflix-tool-header">
+      <div class="netflix-tool-icon">N</div>
+      <div>
+        <h2 style="margin:0;">Netflix Access Tool</h2>
+        <p style="margin:2px 0 0; color:var(--muted); font-size:12px;">ດຶງລະຫັດເຂົ້າສູ່ລະບົບ, ລິງກ໌ Household, ຫຼືລິງກ໌ Reset ລະຫັດຜ່ານ</p>
+      </div>
+    </div>
     <div class="field">
       <label>ອີເມວ Netflix</label>
       <input type="email" id="otp-lookup-email" placeholder="[email protected]">
     </div>
-    <button class="btn" id="otpLookupSearchBtn" style="width:100%; margin-bottom:12px;">ຄົ້ນຫາ</button>
+    <div class="field">
+      <label>ປະເພດທີ່ຕ້ອງການ</label>
+      <div class="otp-type-tabs" id="otpTypeTabs">
+        <button type="button" class="otp-type-tab active" data-otp-type="otp">🔑<span>ລະຫັດເຂົ້າສູ່ລະບົບ</span></button>
+        <button type="button" class="otp-type-tab" data-otp-type="household">🏠<span>Household</span></button>
+        <button type="button" class="otp-type-tab" data-otp-type="reset">🔗<span>Reset ລະຫັດຜ່ານ</span></button>
+      </div>
+    </div>
+    <button class="btn" id="otpLookupSearchBtn" style="width:100%; margin-bottom:12px;">ຄົ້ນຫາ →</button>
     <div id="otpLookupResult"></div>
     <div class="sheet-actions">
       <button class="btn ghost" id="otpLookupCloseBtn">ປິດ</button>
@@ -1221,6 +1306,18 @@ async function updateItemOtp(id, otpValue){
   toast('ອັບເດດ OTP ແລ້ວ');
 }
 
+async function updateItemLinkField(id, type, urlValue){
+  const meta = NETFLIX_FIELD_MAP[type];
+  if(!meta) return;
+  const idx = items.findIndex(i=>i.id===id);
+  if(idx === -1) return;
+  items[idx][meta.valueField] = urlValue.trim();
+  items[idx][meta.tsField] = Date.now();
+  await saveItems();
+  renderAll();
+  toast('ອັບເດດ' + meta.label + 'ແລ້ວ');
+}
+
 async function updateItemOtpWebhook(id, urlValue){
   const idx = items.findIndex(i=>i.id===id);
   if(idx === -1) return;
@@ -1259,28 +1356,42 @@ function fetchOtpNow(id){
 // ໂດຍບໍ່ຕ້ອງເຂົ້າໂໝດແອັດມິນ
 // ============================================================
 let otpLookupEmail = null;
+let otpLookupType = 'otp';
 let pendingOtpFetch = {};   // itemId -> ເວລາທີ່ກົດປຸ່ມດຶງ (ms)
 let otpFetchTimeouts = {};  // itemId -> setTimeout handle
 
-function getOtpDisplayState(it){
+const NETFLIX_FIELD_MAP = {
+  otp: { valueField: 'otp', tsField: 'otpUpdatedAt', label: 'ລະຫັດເຂົ້າສູ່ລະບົບ', icon: '🔑', isLink: false },
+  reset: { valueField: 'resetLink', tsField: 'resetLinkUpdatedAt', label: 'ລິງກ໌ Reset ລະຫັດຜ່ານ', icon: '🔗', isLink: true },
+  household: { valueField: 'householdLink', tsField: 'householdLinkUpdatedAt', label: 'ລິງກ໌ Household', icon: '🏠', isLink: true }
+};
+
+function getOtpDisplayState(it, type){
+  type = type || 'otp';
+  const meta = NETFLIX_FIELD_MAP[type];
+  const value = it[meta.valueField];
+  const updatedAt = it[meta.tsField];
+  const expired = (type === 'otp') ? isOtpExpired(it) : false; // ລິງກ໌ Reset/Household ບໍ່ໝົດອາຍຸອັດຕະໂນມັດ 15 ນາທີແບບ OTP
   const pendingSince = pendingOtpFetch[it.id];
+
   if(pendingSince){
-    if(it.otp && it.otpUpdatedAt && it.otpUpdatedAt > pendingSince && !isOtpExpired(it)){
-      // ໄດ້ລະຫັດໃໝ່ແທ້ໆ ຫຼັງຈາກກົດປຸ່ມແລ້ວ — ລຶບສະຖານະ "ກຳລັງລໍ"
-      delete pendingOtpFetch[it.id];
-      if(otpFetchTimeouts[it.id]){ clearTimeout(otpFetchTimeouts[it.id]); delete otpFetchTimeouts[it.id]; }
-      return { state: 'ready', code: it.otp };
+    if(value && updatedAt && updatedAt > pendingSince && !expired){
+      return { state: 'ready', value, updatedAt };
     }
     return { state: 'loading' };
   }
-  if(it.otp && !isOtpExpired(it)) return { state: 'ready', code: it.otp };
+  if(value && !expired) return { state: 'ready', value, updatedAt };
   return { state: 'none' };
 }
 
 function openOtpLookup(){
   otpLookupEmail = null;
+  otpLookupType = 'otp';
   document.getElementById('otp-lookup-email').value = '';
   document.getElementById('otpLookupResult').innerHTML = '';
+  document.querySelectorAll('#otpTypeTabs .otp-type-tab').forEach(t=>{
+    t.classList.toggle('active', t.getAttribute('data-otp-type')==='otp');
+  });
   document.getElementById('otpLookupOverlay').classList.add('open');
 }
 
@@ -1306,25 +1417,34 @@ function renderOtpLookupResult(){
     return;
   }
 
-  const disp = getOtpDisplayState(it);
+  const meta = NETFLIX_FIELD_MAP[otpLookupType];
+  const disp = getOtpDisplayState(it, otpLookupType);
 
   let bodyHtml;
   if(disp.state === 'loading'){
-    bodyHtml = `<div class="otp-spinner-row"><div class="otp-spinner"></div> ກຳລັງລໍລະຫັດໃໝ່... (ບໍ່ໂຊວ໌ລະຫັດເກົ່າ)</div>`;
+    bodyHtml = `<div class="otp-spinner-row"><div class="otp-spinner"></div> ກຳລັງລໍ${meta.label}ໃໝ່... (ບໍ່ໂຊວ໌ອັນເກົ່າ)</div>`;
   } else if(disp.state === 'ready'){
-    bodyHtml = `<div class="row" style="margin-top:6px;">
-        <span class="v" style="font-weight:700; font-size:16px;">${escapeHtml(disp.code)}</span>
-        <button class="copy" data-copy="${escapeHtml(disp.code)}">ກ໊ອບປີ້</button>
-      </div>`;
+    if(meta.isLink){
+      bodyHtml = `<div class="netflix-link-box">
+          <span class="link-text">${escapeHtml(disp.value)}</span>
+          <button class="copy" data-copy="${escapeHtml(disp.value)}">ກ໊ອບປີ້</button>
+        </div>
+        <a href="${escapeHtml(disp.value)}" target="_blank" rel="noopener" class="btn small" style="width:100%; margin-top:8px; display:block; text-align:center; text-decoration:none;">🔗 ເປີດລິງກ໌</a>`;
+    } else {
+      bodyHtml = `<div class="row" style="margin-top:6px;">
+          <span class="v" style="font-weight:700; font-size:16px;">${escapeHtml(disp.value)}</span>
+          <button class="copy" data-copy="${escapeHtml(disp.value)}">ກ໊ອບປີ້</button>
+        </div>`;
+    }
   } else {
-    bodyHtml = `<div class="row" style="margin-top:6px;"><span class="v">ຍັງບໍ່ມີລະຫັດ</span></div>`;
+    bodyHtml = `<div class="row" style="margin-top:6px;"><span class="v">ຍັງບໍ່ມີ${meta.label}</span></div>`;
   }
 
   result.innerHTML = `
     <div class="otp-box">
-      <div class="otp-box-label">🔑 ລະຫັດ OTP Netflix ${it.otpUpdatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(it.otpUpdatedAt)}</span>` : ''}</div>
+      <div class="otp-box-label">${meta.icon} ${meta.label} ${disp.updatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(disp.updatedAt)}</span>` : ''}</div>
       ${bodyHtml}
-      ${it.otpWebhookUrl ? `<button class="btn small" id="otpLookupFetchNowBtn" style="width:100%; margin-top:8px;" ${disp.state==='loading'?'disabled':''}>⚡ ${disp.state==='loading' ? 'ກຳລັງດຶງ...' : 'ດຶງ OTP ຕອນນີ້ເລີຍ'}</button>` : `<div style="color:var(--muted); font-size:12px; margin-top:8px;">ບັນຊີນີ້ຍັງບໍ່ໄດ້ຕັ້ງລະບົບດຶງອັດຕະໂນມັດ ຕິດຕໍ່ແອັດມິນ</div>`}
+      ${it.otpWebhookUrl ? `<button class="btn small" id="otpLookupFetchNowBtn" style="width:100%; margin-top:8px;" ${disp.state==='loading'?'disabled':''}>⚡ ${disp.state==='loading' ? 'ກຳລັງດຶງ...' : 'ດຶງຕອນນີ້ເລີຍ'}</button>` : `<div style="color:var(--muted); font-size:12px; margin-top:8px;">ບັນຊີນີ້ຍັງບໍ່ໄດ້ຕັ້ງລະບົບດຶງອັດຕະໂນມັດ ຕິດຕໍ່ແອັດມິນ</div>`}
     </div>`;
 
   result.querySelectorAll('[data-copy]').forEach(btn=>{
@@ -1806,21 +1926,41 @@ function render(){
         <button class="copy" data-copy="${escapeHtml(it.password||'')}">ກ໊ອບປີ້</button>
       </div>
       ${String(it.service||'').trim().toLowerCase()==='netflix' ? (()=>{
-        const disp = getOtpDisplayState(it);
+        const dispOtp = getOtpDisplayState(it, 'otp');
+        const dispReset = getOtpDisplayState(it, 'reset');
+        const dispHousehold = getOtpDisplayState(it, 'household');
+        const anyLoading = dispOtp.state==='loading' || dispReset.state==='loading' || dispHousehold.state==='loading';
         return `
       <div class="otp-box">
         <div class="otp-box-label">🔑 ລະຫັດ OTP Netflix ${it.otpUpdatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(it.otpUpdatedAt)}</span>` : ''} ${isOtpExpired(it) ? `<span style="color:var(--danger); font-weight:700;">· ໝົດອາຍຸແລ້ວ (ກຳລັງລຶບ)</span>` : ''}</div>
-        ${disp.state === 'loading' ? `<div class="otp-spinner-row"><div class="otp-spinner"></div> ກຳລັງລໍລະຫັດໃໝ່... (ບໍ່ໂຊວ໌ລະຫັດເກົ່າ)</div>` : ''}
+        ${dispOtp.state === 'loading' ? `<div class="otp-spinner-row"><div class="otp-spinner"></div> ກຳລັງລໍລະຫັດໃໝ່...</div>` : ''}
         <div class="row" style="margin-top:6px;">
           <input type="text" class="otp-input" data-otp-input="${it.id}" placeholder="ໃສ່ລະຫັດ OTP ຈາກອີເມວ" value="${escapeHtml(it.otp||'')}">
           <button class="copy" data-otp-save="${it.id}">ບັນທຶກ</button>
           ${it.otp ? `<button class="copy" data-copy="${escapeHtml(it.otp)}">ກ໊ອບປີ້</button>` : ''}
         </div>
+
+        <div class="otp-box-label" style="margin-top:14px;">🏠 ລິງກ໌ Household ${it.householdLinkUpdatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(it.householdLinkUpdatedAt)}</span>` : ''}</div>
+        ${dispHousehold.state === 'loading' ? `<div class="otp-spinner-row"><div class="otp-spinner"></div> ກຳລັງລໍລິງກ໌ໃໝ່...</div>` : ''}
         <div class="row" style="margin-top:6px;">
+          <input type="text" class="otp-input" data-household-input="${it.id}" placeholder="ວາງລິງກ໌ Household ຈາກອີເມວ" value="${escapeHtml(it.householdLink||'')}">
+          <button class="copy" data-household-save="${it.id}">ບັນທຶກ</button>
+          ${it.householdLink ? `<button class="copy" data-copy="${escapeHtml(it.householdLink)}">ກ໊ອບປີ້</button>` : ''}
+        </div>
+
+        <div class="otp-box-label" style="margin-top:14px;">🔗 ລິງກ໌ Reset ລະຫັດຜ່ານ ${it.resetLinkUpdatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(it.resetLinkUpdatedAt)}</span>` : ''}</div>
+        ${dispReset.state === 'loading' ? `<div class="otp-spinner-row"><div class="otp-spinner"></div> ກຳລັງລໍລິງກ໌ໃໝ່...</div>` : ''}
+        <div class="row" style="margin-top:6px;">
+          <input type="text" class="otp-input" data-reset-input="${it.id}" placeholder="ວາງລິງກ໌ Reset ຈາກອີເມວ" value="${escapeHtml(it.resetLink||'')}">
+          <button class="copy" data-reset-save="${it.id}">ບັນທຶກ</button>
+          ${it.resetLink ? `<button class="copy" data-copy="${escapeHtml(it.resetLink)}">ກ໊ອບປີ້</button>` : ''}
+        </div>
+
+        <div class="row" style="margin-top:14px;">
           <input type="text" class="otp-input" data-otp-webhook-input="${it.id}" placeholder="ວາງ Web App URL ຈາກ Apps Script (ຕັ້ງຄັ້ງດຽວ)" value="${escapeHtml(it.otpWebhookUrl||'')}">
           <button class="copy" data-otp-webhook-save="${it.id}">ບັນທຶກ</button>
         </div>
-        ${it.otpWebhookUrl ? `<button class="btn small" data-otp-fetch-now="${it.id}" style="width:100%; margin-top:6px;" ${disp.state==='loading'?'disabled':''}>⚡ ${disp.state==='loading' ? 'ກຳລັງດຶງ...' : 'ດຶງ OTP ຕອນນີ້ເລີຍ (ບໍ່ຕ້ອງລໍ)'}</button>` : ''}
+        ${it.otpWebhookUrl ? `<button class="btn small" data-otp-fetch-now="${it.id}" style="width:100%; margin-top:6px;" ${anyLoading?'disabled':''}>⚡ ${anyLoading ? 'ກຳລັງດຶງ...' : 'ດຶງທັງໝົດຕອນນີ້ເລີຍ (ບໍ່ຕ້ອງລໍ)'}</button>` : ''}
       </div>`;
       })() : ''}
       <button class="btn ghost small" data-copyall="${it.id}" style="width:100%; margin-top:8px;">ກ໊ອບປີ້ທັງໝົດ (ໄອດີ+ລະຫັດ+ໂນ໊ດ)</button>
@@ -1878,6 +2018,30 @@ function render(){
   list.querySelectorAll('[data-otp-input]').forEach(input=>{
     input.addEventListener('keydown', (e)=>{
       if(e.key === 'Enter') updateItemOtp(input.getAttribute('data-otp-input'), input.value);
+    });
+  });
+  list.querySelectorAll('[data-household-save]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.getAttribute('data-household-save');
+      const input = list.querySelector(`[data-household-input="${id}"]`);
+      if(input) updateItemLinkField(id, 'household', input.value);
+    });
+  });
+  list.querySelectorAll('[data-household-input]').forEach(input=>{
+    input.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter') updateItemLinkField(input.getAttribute('data-household-input'), 'household', input.value);
+    });
+  });
+  list.querySelectorAll('[data-reset-save]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.getAttribute('data-reset-save');
+      const input = list.querySelector(`[data-reset-input="${id}"]`);
+      if(input) updateItemLinkField(id, 'reset', input.value);
+    });
+  });
+  list.querySelectorAll('[data-reset-input]').forEach(input=>{
+    input.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter') updateItemLinkField(input.getAttribute('data-reset-input'), 'reset', input.value);
     });
   });
   list.querySelectorAll('[data-otp-webhook-save]').forEach(btn=>{
@@ -2264,6 +2428,13 @@ document.getElementById('otpLookupSearchBtn').addEventListener('click', searchOt
 document.getElementById('otp-lookup-email').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') searchOtpLookup(); });
 document.getElementById('otpLookupCloseBtn').addEventListener('click', ()=> document.getElementById('otpLookupOverlay').classList.remove('open'));
 document.getElementById('otpLookupOverlay').addEventListener('click', (e)=>{ if(e.target.id==='otpLookupOverlay') e.currentTarget.classList.remove('open'); });
+document.querySelectorAll('#otpTypeTabs .otp-type-tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    otpLookupType = tab.getAttribute('data-otp-type');
+    document.querySelectorAll('#otpTypeTabs .otp-type-tab').forEach(t=> t.classList.toggle('active', t===tab));
+    if(otpLookupEmail) renderOtpLookupResult();
+  });
+});
 document.getElementById('historyServiceFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
 document.getElementById('historyCloseBtn').addEventListener('click', ()=> document.getElementById('historyOverlay').classList.remove('open'));
 document.getElementById('historyOverlay').addEventListener('click', (e)=>{ if(e.target.id==='historyOverlay') e.currentTarget.classList.remove('open'); });
