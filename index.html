@@ -757,6 +757,7 @@
       ລໍຖ້າແອັດມິນເພີ່ມສະຕັອກກ່ອນເດີ້
     </div>
     <button class="btn ghost small" id="employeeHistoryBtn" style="width:100%; margin-top:16px;">📜 ປະຫວັດການຮັບໄອດີ</button>
+    <button class="btn ghost small" id="otpLookupBtn" style="width:100%; margin-top:8px;">🔑 ດຶງລະຫັດ OTP Netflix</button>
   </div>
 
   <div id="adminView" style="display:none;">
@@ -948,6 +949,21 @@
     <div class="sheet-actions">
       <button class="btn ghost" id="claimConfirmCancelBtn">ຍົກເລີກ</button>
       <button class="btn" id="claimConfirmOkBtn">ຢືນຢັນ</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="otpLookupOverlay">
+  <div class="sheet">
+    <h2>🔑 ດຶງລະຫັດ OTP Netflix</h2>
+    <div class="field">
+      <label>ອີເມວ Netflix</label>
+      <input type="email" id="otp-lookup-email" placeholder="[email protected]">
+    </div>
+    <button class="btn" id="otpLookupSearchBtn" style="width:100%; margin-bottom:12px;">ຄົ້ນຫາ</button>
+    <div id="otpLookupResult"></div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="otpLookupCloseBtn">ປິດ</button>
     </div>
   </div>
 </div>
@@ -1174,6 +1190,58 @@ function fetchOtpNow(id){
   fetch(it.otpWebhookUrl, { mode: 'no-cors' }).catch(()=>{
     // ບໍ່ຕ້ອງສະແດງ error ເພາະ no-cors ອ່ານຜົນບໍ່ໄດ້ຢູ່ແລ້ວ ແຕ່ request ຍັງອອກໄປຮອດ
   });
+}
+
+// ============================================================
+// OTP LOOKUP — ໜ້າພະນັກງານ: ໃສ່ອີເມວ Netflix ແລ້ວດຶງ OTP ໄດ້ເລີຍ
+// ໂດຍບໍ່ຕ້ອງເຂົ້າໂໝດແອັດມິນ
+// ============================================================
+let otpLookupEmail = null;
+
+function openOtpLookup(){
+  otpLookupEmail = null;
+  document.getElementById('otp-lookup-email').value = '';
+  document.getElementById('otpLookupResult').innerHTML = '';
+  document.getElementById('otpLookupOverlay').classList.add('open');
+}
+
+function searchOtpLookup(){
+  const email = document.getElementById('otp-lookup-email').value.trim();
+  if(!email){ toast('ໃສ່ອີເມວກ່ອນເດີ້'); return; }
+  otpLookupEmail = email;
+  renderOtpLookupResult();
+}
+
+function renderOtpLookupResult(){
+  const overlay = document.getElementById('otpLookupOverlay');
+  if(!overlay || !overlay.classList.contains('open') || !otpLookupEmail) return;
+
+  const result = document.getElementById('otpLookupResult');
+  const it = items.find(i=>
+    String(i.service||'').trim().toLowerCase()==='netflix' &&
+    String(i.account||'').trim().toLowerCase()===otpLookupEmail.toLowerCase()
+  );
+
+  if(!it){
+    result.innerHTML = `<div style="color:var(--muted); padding:10px 0;">ບໍ່ພົບໄອດີ Netflix ທີ່ຕົງກັບອີເມວນີ້ໃນລະບົບ</div>`;
+    return;
+  }
+
+  result.innerHTML = `
+    <div class="otp-box">
+      <div class="otp-box-label">🔑 ລະຫັດ OTP Netflix ${it.otpUpdatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(it.otpUpdatedAt)}</span>` : ''}</div>
+      <div class="row" style="margin-top:6px;">
+        <span class="v" style="font-weight:700; font-size:16px;">${it.otp ? escapeHtml(it.otp) : 'ຍັງບໍ່ມີລະຫັດ'}</span>
+        ${it.otp ? `<button class="copy" data-copy="${escapeHtml(it.otp)}">ກ໊ອບປີ້</button>` : ''}
+      </div>
+      ${it.otpWebhookUrl ? `<button class="btn small" id="otpLookupFetchNowBtn" style="width:100%; margin-top:8px;">⚡ ດຶງ OTP ຕອນນີ້ເລີຍ</button>` : `<div style="color:var(--muted); font-size:12px; margin-top:8px;">ບັນຊີນີ້ຍັງບໍ່ໄດ້ຕັ້ງລະບົບດຶງອັດຕະໂນມັດ ຕິດຕໍ່ແອັດມິນ</div>`}
+    </div>`;
+
+  result.querySelectorAll('[data-copy]').forEach(btn=>{
+    btn.addEventListener('click', ()=> copyToClipboard(btn.getAttribute('data-copy')));
+  });
+  const fetchBtn = document.getElementById('otpLookupFetchNowBtn');
+  if(fetchBtn) fetchBtn.addEventListener('click', ()=> fetchOtpNow(it.id));
 }
 
 async function saveLog(){
@@ -1753,6 +1821,7 @@ function requestDelete(id){
 function renderAll(){
   render();
   renderTiles();
+  renderOtpLookupResult();
 }
 
 function getServiceCategory(name){
@@ -2095,6 +2164,12 @@ document.getElementById('employeeHistoryBtn').addEventListener('click', ()=>{
 });
 document.getElementById('historyFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
 document.getElementById('historyDateFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
+
+document.getElementById('otpLookupBtn').addEventListener('click', openOtpLookup);
+document.getElementById('otpLookupSearchBtn').addEventListener('click', searchOtpLookup);
+document.getElementById('otp-lookup-email').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') searchOtpLookup(); });
+document.getElementById('otpLookupCloseBtn').addEventListener('click', ()=> document.getElementById('otpLookupOverlay').classList.remove('open'));
+document.getElementById('otpLookupOverlay').addEventListener('click', (e)=>{ if(e.target.id==='otpLookupOverlay') e.currentTarget.classList.remove('open'); });
 document.getElementById('historyServiceFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
 document.getElementById('historyCloseBtn').addEventListener('click', ()=> document.getElementById('historyOverlay').classList.remove('open'));
 document.getElementById('historyOverlay').addEventListener('click', (e)=>{ if(e.target.id==='historyOverlay') e.currentTarget.classList.remove('open'); });
