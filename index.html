@@ -1156,6 +1156,26 @@ async function updateItemOtp(id, otpValue){
   toast('ອັບເດດ OTP ແລ້ວ');
 }
 
+async function updateItemOtpWebhook(id, urlValue){
+  const idx = items.findIndex(i=>i.id===id);
+  if(idx === -1) return;
+  items[idx].otpWebhookUrl = urlValue.trim();
+  await saveItems();
+  renderAll();
+  toast('ບັນທຶກ Web App URL ແລ້ວ');
+}
+
+function fetchOtpNow(id){
+  const it = items.find(i=>i.id===id);
+  if(!it || !it.otpWebhookUrl) return;
+  toast('ກຳລັງສັ່ງໃຫ້ເຊັກອີເມວ... ລໍ 5-10 ວິນາທີ');
+  // ໃຊ້ mode:no-cors ເພາະ Apps Script Web App ບໍ່ໄດ້ຕັ້ງ CORS header ໃຫ້ອ່ານຄືນ
+  // ພຽງແຕ່ຕ້ອງການ "ກະຕຸ້ນ" ໃຫ້ສະຄຣິບຮັນເທົ່ານັ້ນ ຜົນລັບຈະມາທາງ Firestore realtime ເອງ
+  fetch(it.otpWebhookUrl, { mode: 'no-cors' }).catch(()=>{
+    // ບໍ່ຕ້ອງສະແດງ error ເພາະ no-cors ອ່ານຜົນບໍ່ໄດ້ຢູ່ແລ້ວ ແຕ່ request ຍັງອອກໄປຮອດ
+  });
+}
+
 async function saveLog(){
   try{
     await logDocRef.set({ list: activityLog });
@@ -1635,6 +1655,11 @@ function render(){
           <button class="copy" data-otp-save="${it.id}">ບັນທຶກ</button>
           ${it.otp ? `<button class="copy" data-copy="${escapeHtml(it.otp)}">ກ໊ອບປີ້</button>` : ''}
         </div>
+        <div class="row" style="margin-top:6px;">
+          <input type="text" class="otp-input" data-otp-webhook-input="${it.id}" placeholder="ວາງ Web App URL ຈາກ Apps Script (ຕັ້ງຄັ້ງດຽວ)" value="${escapeHtml(it.otpWebhookUrl||'')}">
+          <button class="copy" data-otp-webhook-save="${it.id}">ບັນທຶກ</button>
+        </div>
+        ${it.otpWebhookUrl ? `<button class="btn small" data-otp-fetch-now="${it.id}" style="width:100%; margin-top:6px;">⚡ ດຶງ OTP ຕອນນີ້ເລີຍ (ບໍ່ຕ້ອງລໍ)</button>` : ''}
       </div>` : ''}
       <button class="btn ghost small" data-copyall="${it.id}" style="width:100%; margin-top:8px;">ກ໊ອບປີ້ທັງໝົດ (ໄອດີ+ລະຫັດ+ໂນ໊ດ)</button>
       ${it.note ? `<div class="note">${escapeHtml(it.note)}</div>` : ''}
@@ -1692,6 +1717,21 @@ function render(){
     input.addEventListener('keydown', (e)=>{
       if(e.key === 'Enter') updateItemOtp(input.getAttribute('data-otp-input'), input.value);
     });
+  });
+  list.querySelectorAll('[data-otp-webhook-save]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.getAttribute('data-otp-webhook-save');
+      const input = list.querySelector(`[data-otp-webhook-input="${id}"]`);
+      if(input) updateItemOtpWebhook(id, input.value);
+    });
+  });
+  list.querySelectorAll('[data-otp-webhook-input]').forEach(input=>{
+    input.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter') updateItemOtpWebhook(input.getAttribute('data-otp-webhook-input'), input.value);
+    });
+  });
+  list.querySelectorAll('[data-otp-fetch-now]').forEach(btn=>{
+    btn.addEventListener('click', ()=> fetchOtpNow(btn.getAttribute('data-otp-fetch-now')));
   });
   list.querySelectorAll('[data-edit]').forEach(btn=>{
     btn.addEventListener('click', ()=> openSheet(btn.getAttribute('data-edit')));
