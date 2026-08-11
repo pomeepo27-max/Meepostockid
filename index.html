@@ -1050,7 +1050,7 @@
       <div class="netflix-tool-icon">N</div>
       <div>
         <h2 style="margin:0;">Netflix Access Tool</h2>
-        <p style="margin:2px 0 0; color:var(--muted); font-size:12px;">ດຶງລະຫັດເຂົ້າສູ່ລະບົບ, ລິງກ໌ Household, ຫຼືລິງກ໌ Reset ລະຫັດຜ່ານ</p>
+        <p style="margin:2px 0 0; color:var(--muted); font-size:12px;">ດຶງລະຫັດເຂົ້າສູ່ລະບົບ ຫຼືລິງກ໌ Household</p>
       </div>
     </div>
     <div class="field">
@@ -1062,7 +1062,6 @@
       <div class="otp-type-tabs" id="otpTypeTabs">
         <button type="button" class="otp-type-tab active" data-otp-type="otp">🔑<span>ລະຫັດເຂົ້າສູ່ລະບົບ</span></button>
         <button type="button" class="otp-type-tab" data-otp-type="household">🏠<span>Household</span></button>
-        <button type="button" class="otp-type-tab" data-otp-type="reset">🔗<span>Reset ລະຫັດຜ່ານ</span></button>
       </div>
     </div>
     <button class="btn" id="otpLookupSearchBtn" style="width:100%; margin-bottom:12px;">ຄົ້ນຫາ →</button>
@@ -1362,7 +1361,6 @@ let otpFetchTimeouts = {};  // itemId -> setTimeout handle
 
 const NETFLIX_FIELD_MAP = {
   otp: { valueField: 'otp', tsField: 'otpUpdatedAt', label: 'ລະຫັດເຂົ້າສູ່ລະບົບ', icon: '🔑', isLink: false },
-  reset: { valueField: 'resetLink', tsField: 'resetLinkUpdatedAt', label: 'ລິງກ໌ Reset ລະຫັດຜ່ານ', icon: '🔗', isLink: true },
   household: { valueField: 'householdLink', tsField: 'householdLinkUpdatedAt', label: 'ລິງກ໌ Household', icon: '🏠', isLink: true }
 };
 
@@ -1927,9 +1925,8 @@ function render(){
       </div>
       ${String(it.service||'').trim().toLowerCase()==='netflix' ? (()=>{
         const dispOtp = getOtpDisplayState(it, 'otp');
-        const dispReset = getOtpDisplayState(it, 'reset');
         const dispHousehold = getOtpDisplayState(it, 'household');
-        const anyLoading = dispOtp.state==='loading' || dispReset.state==='loading' || dispHousehold.state==='loading';
+        const anyLoading = dispOtp.state==='loading' || dispHousehold.state==='loading';
         return `
       <div class="otp-box">
         <div class="otp-box-label">🔑 ລະຫັດ OTP Netflix ${it.otpUpdatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(it.otpUpdatedAt)}</span>` : ''} ${isOtpExpired(it) ? `<span style="color:var(--danger); font-weight:700;">· ໝົດອາຍຸແລ້ວ (ກຳລັງລຶບ)</span>` : ''}</div>
@@ -1946,14 +1943,6 @@ function render(){
           <input type="text" class="otp-input" data-household-input="${it.id}" placeholder="ວາງລິງກ໌ Household ຈາກອີເມວ" value="${escapeHtml(it.householdLink||'')}">
           <button class="copy" data-household-save="${it.id}">ບັນທຶກ</button>
           ${it.householdLink ? `<button class="copy" data-copy="${escapeHtml(it.householdLink)}">ກ໊ອບປີ້</button>` : ''}
-        </div>
-
-        <div class="otp-box-label" style="margin-top:14px;">🔗 ລິງກ໌ Reset ລະຫັດຜ່ານ ${it.resetLinkUpdatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(it.resetLinkUpdatedAt)}</span>` : ''}</div>
-        ${dispReset.state === 'loading' ? `<div class="otp-spinner-row"><div class="otp-spinner"></div> ກຳລັງລໍລິງກ໌ໃໝ່...</div>` : ''}
-        <div class="row" style="margin-top:6px;">
-          <input type="text" class="otp-input" data-reset-input="${it.id}" placeholder="ວາງລິງກ໌ Reset ຈາກອີເມວ" value="${escapeHtml(it.resetLink||'')}">
-          <button class="copy" data-reset-save="${it.id}">ບັນທຶກ</button>
-          ${it.resetLink ? `<button class="copy" data-copy="${escapeHtml(it.resetLink)}">ກ໊ອບປີ້</button>` : ''}
         </div>
 
         <div class="row" style="margin-top:14px;">
@@ -2030,18 +2019,6 @@ function render(){
   list.querySelectorAll('[data-household-input]').forEach(input=>{
     input.addEventListener('keydown', (e)=>{
       if(e.key === 'Enter') updateItemLinkField(input.getAttribute('data-household-input'), 'household', input.value);
-    });
-  });
-  list.querySelectorAll('[data-reset-save]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const id = btn.getAttribute('data-reset-save');
-      const input = list.querySelector(`[data-reset-input="${id}"]`);
-      if(input) updateItemLinkField(id, 'reset', input.value);
-    });
-  });
-  list.querySelectorAll('[data-reset-input]').forEach(input=>{
-    input.addEventListener('keydown', (e)=>{
-      if(e.key === 'Enter') updateItemLinkField(input.getAttribute('data-reset-input'), 'reset', input.value);
     });
   });
   list.querySelectorAll('[data-otp-webhook-save]').forEach(btn=>{
