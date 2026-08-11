@@ -469,6 +469,26 @@
     font-weight: 700;
     color: var(--text);
   }
+  .otp-spinner-row{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .otp-spinner{
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    border-top-color: var(--accent-2);
+    animation: otpSpin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes otpSpin{
+    to{ transform: rotate(360deg); }
+  }
   .otp-input{
     flex: 1;
     background: var(--panel);
@@ -1213,7 +1233,20 @@ async function updateItemOtpWebhook(id, urlValue){
 function fetchOtpNow(id){
   const it = items.find(i=>i.id===id);
   if(!it || !it.otpWebhookUrl) return;
+
+  pendingOtpFetch[id] = Date.now();
+  if(otpFetchTimeouts[id]) clearTimeout(otpFetchTimeouts[id]);
+  otpFetchTimeouts[id] = setTimeout(()=>{
+    if(pendingOtpFetch[id]){
+      delete pendingOtpFetch[id];
+      delete otpFetchTimeouts[id];
+      renderAll();
+      toast('ບໍ່ພົບລະຫັດໃໝ່ພາຍໃນເວລາ ລອງໃໝ່ອີກຄັ້ງ');
+    }
+  }, 60000);
+
   toast('ກຳລັງສັ່ງໃຫ້ເຊັກອີເມວ... ລໍ 5-10 ວິນາທີ');
+  renderAll();
   // ໃຊ້ mode:no-cors ເພາະ Apps Script Web App ບໍ່ໄດ້ຕັ້ງ CORS header ໃຫ້ອ່ານຄືນ
   // ພຽງແຕ່ຕ້ອງການ "ກະຕຸ້ນ" ໃຫ້ສະຄຣິບຮັນເທົ່ານັ້ນ ຜົນລັບຈະມາທາງ Firestore realtime ເອງ
   fetch(it.otpWebhookUrl, { mode: 'no-cors' }).catch(()=>{
@@ -1226,6 +1259,23 @@ function fetchOtpNow(id){
 // ໂດຍບໍ່ຕ້ອງເຂົ້າໂໝດແອັດມິນ
 // ============================================================
 let otpLookupEmail = null;
+let pendingOtpFetch = {};   // itemId -> ເວລາທີ່ກົດປຸ່ມດຶງ (ms)
+let otpFetchTimeouts = {};  // itemId -> setTimeout handle
+
+function getOtpDisplayState(it){
+  const pendingSince = pendingOtpFetch[it.id];
+  if(pendingSince){
+    if(it.otp && it.otpUpdatedAt && it.otpUpdatedAt > pendingSince && !isOtpExpired(it)){
+      // ໄດ້ລະຫັດໃໝ່ແທ້ໆ ຫຼັງຈາກກົດປຸ່ມແລ້ວ — ລຶບສະຖານະ "ກຳລັງລໍ"
+      delete pendingOtpFetch[it.id];
+      if(otpFetchTimeouts[it.id]){ clearTimeout(otpFetchTimeouts[it.id]); delete otpFetchTimeouts[it.id]; }
+      return { state: 'ready', code: it.otp };
+    }
+    return { state: 'loading' };
+  }
+  if(it.otp && !isOtpExpired(it)) return { state: 'ready', code: it.otp };
+  return { state: 'none' };
+}
 
 function openOtpLookup(){
   otpLookupEmail = null;
@@ -1256,16 +1306,25 @@ function renderOtpLookupResult(){
     return;
   }
 
-  const otpValid = it.otp && !isOtpExpired(it);
+  const disp = getOtpDisplayState(it);
+
+  let bodyHtml;
+  if(disp.state === 'loading'){
+    bodyHtml = `<div class="otp-spinner-row"><div class="otp-spinner"></div> ກຳລັງລໍລະຫັດໃໝ່... (ບໍ່ໂຊວ໌ລະຫັດເກົ່າ)</div>`;
+  } else if(disp.state === 'ready'){
+    bodyHtml = `<div class="row" style="margin-top:6px;">
+        <span class="v" style="font-weight:700; font-size:16px;">${escapeHtml(disp.code)}</span>
+        <button class="copy" data-copy="${escapeHtml(disp.code)}">ກ໊ອບປີ້</button>
+      </div>`;
+  } else {
+    bodyHtml = `<div class="row" style="margin-top:6px;"><span class="v">ຍັງບໍ່ມີລະຫັດ</span></div>`;
+  }
 
   result.innerHTML = `
     <div class="otp-box">
       <div class="otp-box-label">🔑 ລະຫັດ OTP Netflix ${it.otpUpdatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(it.otpUpdatedAt)}</span>` : ''}</div>
-      <div class="row" style="margin-top:6px;">
-        <span class="v" style="font-weight:700; font-size:16px;">${otpValid ? escapeHtml(it.otp) : (it.otp ? 'ໝົດອາຍຸແລ້ວ (ເກີນ 15 ນາທີ)' : 'ຍັງບໍ່ມີລະຫັດ')}</span>
-        ${otpValid ? `<button class="copy" data-copy="${escapeHtml(it.otp)}">ກ໊ອບປີ້</button>` : ''}
-      </div>
-      ${it.otpWebhookUrl ? `<button class="btn small" id="otpLookupFetchNowBtn" style="width:100%; margin-top:8px;">⚡ ດຶງ OTP ຕອນນີ້ເລີຍ</button>` : `<div style="color:var(--muted); font-size:12px; margin-top:8px;">ບັນຊີນີ້ຍັງບໍ່ໄດ້ຕັ້ງລະບົບດຶງອັດຕະໂນມັດ ຕິດຕໍ່ແອັດມິນ</div>`}
+      ${bodyHtml}
+      ${it.otpWebhookUrl ? `<button class="btn small" id="otpLookupFetchNowBtn" style="width:100%; margin-top:8px;" ${disp.state==='loading'?'disabled':''}>⚡ ${disp.state==='loading' ? 'ກຳລັງດຶງ...' : 'ດຶງ OTP ຕອນນີ້ເລີຍ'}</button>` : `<div style="color:var(--muted); font-size:12px; margin-top:8px;">ບັນຊີນີ້ຍັງບໍ່ໄດ້ຕັ້ງລະບົບດຶງອັດຕະໂນມັດ ຕິດຕໍ່ແອັດມິນ</div>`}
     </div>`;
 
   result.querySelectorAll('[data-copy]').forEach(btn=>{
@@ -1746,9 +1805,12 @@ function render(){
         <span class="v">${escapeHtml(it.password||'-')}</span>
         <button class="copy" data-copy="${escapeHtml(it.password||'')}">ກ໊ອບປີ້</button>
       </div>
-      ${String(it.service||'').trim().toLowerCase()==='netflix' ? `
+      ${String(it.service||'').trim().toLowerCase()==='netflix' ? (()=>{
+        const disp = getOtpDisplayState(it);
+        return `
       <div class="otp-box">
         <div class="otp-box-label">🔑 ລະຫັດ OTP Netflix ${it.otpUpdatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(it.otpUpdatedAt)}</span>` : ''} ${isOtpExpired(it) ? `<span style="color:var(--danger); font-weight:700;">· ໝົດອາຍຸແລ້ວ (ກຳລັງລຶບ)</span>` : ''}</div>
+        ${disp.state === 'loading' ? `<div class="otp-spinner-row"><div class="otp-spinner"></div> ກຳລັງລໍລະຫັດໃໝ່... (ບໍ່ໂຊວ໌ລະຫັດເກົ່າ)</div>` : ''}
         <div class="row" style="margin-top:6px;">
           <input type="text" class="otp-input" data-otp-input="${it.id}" placeholder="ໃສ່ລະຫັດ OTP ຈາກອີເມວ" value="${escapeHtml(it.otp||'')}">
           <button class="copy" data-otp-save="${it.id}">ບັນທຶກ</button>
@@ -1758,8 +1820,9 @@ function render(){
           <input type="text" class="otp-input" data-otp-webhook-input="${it.id}" placeholder="ວາງ Web App URL ຈາກ Apps Script (ຕັ້ງຄັ້ງດຽວ)" value="${escapeHtml(it.otpWebhookUrl||'')}">
           <button class="copy" data-otp-webhook-save="${it.id}">ບັນທຶກ</button>
         </div>
-        ${it.otpWebhookUrl ? `<button class="btn small" data-otp-fetch-now="${it.id}" style="width:100%; margin-top:6px;">⚡ ດຶງ OTP ຕອນນີ້ເລີຍ (ບໍ່ຕ້ອງລໍ)</button>` : ''}
-      </div>` : ''}
+        ${it.otpWebhookUrl ? `<button class="btn small" data-otp-fetch-now="${it.id}" style="width:100%; margin-top:6px;" ${disp.state==='loading'?'disabled':''}>⚡ ${disp.state==='loading' ? 'ກຳລັງດຶງ...' : 'ດຶງ OTP ຕອນນີ້ເລີຍ (ບໍ່ຕ້ອງລໍ)'}</button>` : ''}
+      </div>`;
+      })() : ''}
       <button class="btn ghost small" data-copyall="${it.id}" style="width:100%; margin-top:8px;">ກ໊ອບປີ້ທັງໝົດ (ໄອດີ+ລະຫັດ+ໂນ໊ດ)</button>
       ${it.note ? `<div class="note">${escapeHtml(it.note)}</div>` : ''}
       <div class="meta">
