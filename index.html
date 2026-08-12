@@ -1825,12 +1825,7 @@ function render(){
     return true;
   });
 
-  filtered.sort((a,b)=>{
-    const da = a.expiry ? new Date(a.expiry).getTime() : Infinity;
-    const db = b.expiry ? new Date(b.expiry).getTime() : Infinity;
-    if(da !== db) return da - db;
-    return (b.createdAt||0)-(a.createdAt||0);
-  });
+  filtered.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 
   const list = document.getElementById('list');
   const empty = document.getElementById('empty');
