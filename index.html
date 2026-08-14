@@ -252,6 +252,9 @@
   .history-item.create{ border-left: 3px solid var(--accent-2); }
   .history-item.edit{ border-left: 3px solid var(--warn); }
   .history-item.delete{ border-left: 3px solid var(--danger); }
+  .history-item.otp_received{ border-left: 3px solid var(--accent); }
+  .history-item.otp_expired{ border-left: 3px solid var(--muted); }
+  .history-item.household_received{ border-left: 3px solid var(--accent-3); }
   .history-item .htype{
     font-size: 11px;
     font-weight: 700;
@@ -263,6 +266,9 @@
   .history-item .htype.create{ background: rgba(124,92,255,0.14); color: var(--accent-2); }
   .history-item .htype.edit{ background: rgba(224,138,30,0.14); color: var(--warn); }
   .history-item .htype.delete{ background: rgba(229,64,95,0.14); color: var(--danger); }
+  .history-item .htype.otp_received{ background: rgba(255,95,162,0.14); color: var(--accent); }
+  .history-item .htype.otp_expired{ background: rgba(117,108,140,0.14); color: var(--muted); }
+  .history-item .htype.household_received{ background: rgba(0,179,160,0.14); color: var(--accent-3); }
   .history-item .hmain{ font-size: 13px; font-weight: 700; }
   .history-item .hsub{ font-size: 12px; color: var(--muted); margin-top: 2px; }
   .history-item .htime{ font-size: 11px; color: var(--muted); white-space: nowrap; text-align: right; }
@@ -314,7 +320,32 @@
     outline: none;
     border-color: var(--accent);
   }
-  .search{ flex: 1; min-width: 140px; }
+  .search{ flex: 1; min-width: 140px; width: 100%; padding-right: 32px; }
+  .search-wrap{
+    position: relative;
+    flex: 1;
+    min-width: 140px;
+    display: flex;
+  }
+  .search-clear{
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: var(--panel-2);
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .search-clear:hover{ background: var(--danger-dim); color: var(--danger); }
   .toolbar select{ min-width: 110px; }
 
   .chip-filter-row{
@@ -409,6 +440,34 @@
     align-items:center;
     gap: 10px;
   }
+  .card-select{
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
+  .bulk-action-bar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+  }
+  .bulk-action-bar .bulk-count{
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .bulk-action-bar .bulk-btns{
+    display:flex;
+    gap: 8px;
+  }
   .avatar{
     width: 36px;
     height: 36px;
@@ -488,6 +547,33 @@
   }
   @keyframes otpSpin{
     to{ transform: rotate(360deg); }
+  }
+
+  .otp-mini-history{
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--line);
+  }
+  .otp-mini-history-title{
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .otp-mini-history-row{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 4px 0;
+  }
+  .otp-mini-history-row .htype{
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
   }
 
   .netflix-tool-sheet{
@@ -862,7 +948,10 @@
   <button class="btn ghost small" id="historyBtn" style="margin-bottom:14px;">📜 ເບິ່ງປະຫວັດການຊື້/ແກ້ໄຂ</button>
 
   <div class="toolbar">
-    <input class="search" id="search" placeholder="ຄົ້ນຫາ ແອັບ / ໄອດີ / ລູກຄ້າ...">
+    <div class="search-wrap">
+      <input class="search" id="search" placeholder="ຄົ້ນຫາ ແອັບ / ໄອດີ / ລູກຄ້າ...">
+      <button type="button" class="search-clear" id="searchClearBtn" style="display:none;" title="ລຶບຄຳຄົ້ນຫາ">×</button>
+    </div>
     <select id="filter-status">
       <option value="">ທຸກສະຖານະ</option>
       <option value="available">ພ້ອມຂາຍ</option>
@@ -874,6 +963,8 @@
 
   <div class="chip-filter-row" id="serviceChips"></div>
   <div class="chip-filter-row" id="durationChips"></div>
+
+  <div id="bulkActionBar" class="bulk-action-bar" style="display:none;"></div>
 
   <div id="stockPaginationTop" class="pagination-row"></div>
   <div id="list" class="grid"></div>
@@ -980,6 +1071,10 @@
 <div class="overlay" id="historyOverlay">
   <div class="sheet">
     <h2 id="historyTitle">ປະຫວັດການຊື້/ແກ້ໄຂ</h2>
+    <div class="search-wrap" style="margin-bottom:10px;">
+      <input class="search" id="historySearch" placeholder="ຄົ້ນຫາ ແອັບ / ໄອດີ / ແພັກເກັດ...">
+      <button type="button" class="search-clear" id="historySearchClearBtn" style="display:none;" title="ລຶບຄຳຄົ້ນຫາ">×</button>
+    </div>
     <select id="historyServiceFilter" style="width:100%; margin-bottom:10px;">
       <option value="">ທຸກແອັບ</option>
     </select>
@@ -1014,6 +1109,17 @@
     <div class="sheet-actions">
       <button class="btn ghost" id="deleteCancelBtn">ຍົກເລີກ</button>
       <button class="btn danger" id="deleteConfirmBtn">ລຶບເລີຍ</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="bulkDeleteConfirmOverlay">
+  <div class="sheet">
+    <h2 id="bulkDeleteTitle">ລຶບລາຍການທີ່ເລືອກທັງໝົດ?</h2>
+    <p style="color:var(--muted); font-size:13px;">ລຶບແລ້ວຈະກູ້ຄືນບໍ່ໄດ້</p>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="bulkDeleteCancelBtn">ຍົກເລີກ</button>
+      <button class="btn danger" id="bulkDeleteConfirmBtn">ລຶບເລີຍ</button>
     </div>
   </div>
 </div>
@@ -1104,6 +1210,7 @@ let editingId = null;
 let mode = 'employee';
 let selectedServiceFilter = '';
 let selectedDurationFilter = '';
+let selectedItemIds = new Set();
 
 // ສີສະເພາະສຳລັບແອັບທີ່ພົບເລື້ອຍ ສ່ວນແອັບອື່ນຈະສຸ່ມສີຕາມຊື່ແບບຄົງທີ່
 const SERVICE_COLORS = {
@@ -1225,6 +1332,7 @@ async function cleanupExpiredOtps(){
   try{
     items.forEach(it=>{
       if(isOtpExpired(it)){
+        logActivity('otp_expired', it, `ລະຫັດ ${it.otp} ໝົດອາຍຸ (ໄດ້ຮັບຕອນ ${formatDateTime(it.otpUpdatedAt)})`);
         it.otp = '';
         it.otpUpdatedAt = null;
       }
@@ -1236,9 +1344,27 @@ async function cleanupExpiredOtps(){
   }
 }
 
+function detectAndLogOtpArrivals(oldItems, newItems){
+  if(!oldItems || oldItems.length === 0) return; // ຂ້າມຮອບໂຫຼດຄັ້ງທຳອິດ (ບໍ່ມີຂໍ້ມູນເກົ່າໃຫ້ປຽບທຽບ)
+  const oldMap = {};
+  oldItems.forEach(i=>{ oldMap[i.id] = i; });
+  newItems.forEach(ni=>{
+    const oi = oldMap[ni.id];
+    if(!oi) return;
+    if(ni.otp && ni.otpUpdatedAt && ni.otpUpdatedAt !== oi.otpUpdatedAt){
+      logActivity('otp_received', ni, `ໄດ້ຮັບລະຫັດ OTP: ${ni.otp}`);
+    }
+    if(ni.householdLink && ni.householdLinkUpdatedAt && ni.householdLinkUpdatedAt !== oi.householdLinkUpdatedAt){
+      logActivity('household_received', ni, `ໄດ້ຮັບລິງກ໌ Household ໃໝ່`);
+    }
+  });
+}
+
 function loadItems(){
   itemsDocRef.onSnapshot((doc)=>{
-    items = (doc.exists && Array.isArray(doc.data().list)) ? doc.data().list : [];
+    const newItems = (doc.exists && Array.isArray(doc.data().list)) ? doc.data().list : [];
+    detectAndLogOtpArrivals(items, newItems);
+    items = newItems;
     firestoreReady = true;
     renderAll();
     cleanupExpiredOtps();
@@ -1397,7 +1523,11 @@ function searchOtpLookup(){
   const email = document.getElementById('otp-lookup-email').value.trim();
   if(!email){ toast('ໃສ່ອີເມວກ່ອນເດີ້'); return; }
   otpLookupEmail = email;
-  renderOtpLookupResult();
+
+  const result = document.getElementById('otpLookupResult');
+  result.innerHTML = `<div class="otp-spinner-row" style="justify-content:center; padding:16px 0;"><div class="otp-spinner"></div> ກຳລັງຄົ້ນຫາ...</div>`;
+
+  setTimeout(()=>{ renderOtpLookupResult(); }, 400);
 }
 
 function renderOtpLookupResult(){
@@ -1461,7 +1591,7 @@ async function saveLog(){
   }
 }
 
-function logActivity(type, snapshot){
+function logActivity(type, snapshot, detail){
   activityLog.unshift({
     id: 'log_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
     itemId: snapshot.id || null,
@@ -1473,6 +1603,7 @@ function logActivity(type, snapshot){
     password: snapshot.password || '',
     note: snapshot.note || '',
     price: snapshot.price ?? null,
+    detail: detail || '',
   });
   if(activityLog.length > 300) activityLog = activityLog.slice(0, 300);
   saveLog();
@@ -1503,6 +1634,9 @@ const HISTORY_LABELS = {
   create: { label: 'ເພີ່ມສິນຄ້າໃໝ່', verb: 'ເພີ່ມສິນຄ້າໃໝ່ເຂົ້າສະຕັອກ' },
   edit: { label: 'ແກ້ໄຂສິນຄ້າ', verb: 'ແກ້ໄຂຂໍ້ມູນສິນຄ້ານີ້' },
   delete: { label: 'ລຶບສິນຄ້າ', verb: 'ລຶບສິນຄ້ານີ້ອອກຈາກສະຕັອກ' },
+  otp_received: { label: 'ໄດ້ຮັບ OTP', verb: 'ໄດ້ຮັບລະຫັດ OTP ໃໝ່' },
+  otp_expired: { label: 'OTP ໝົດອາຍຸ', verb: 'ລະຫັດ OTP ໝົດອາຍຸ ຖືກລຶບອອກອັດຕະໂນມັດ' },
+  household_received: { label: 'ໄດ້ຮັບລິງກ໌ Household', verb: 'ໄດ້ຮັບລິງກ໌ Household ໃໝ່' },
 };
 
 const HISTORY_PAGE_SIZE = 8;
@@ -1552,6 +1686,7 @@ function renderHistory(){
   const filter = document.getElementById('historyFilter').value;
   const dateFilter = document.getElementById('historyDateFilter').value;
   const serviceFilter = document.getElementById('historyServiceFilter').value;
+  const searchTerm = document.getElementById('historySearch').value.trim().toLowerCase();
   const list = document.getElementById('historyList');
   const pagination = document.getElementById('historyPagination');
 
@@ -1560,6 +1695,12 @@ function renderHistory(){
   let filtered = filter ? activityLog.filter(h=>h.type===filter) : activityLog.slice();
   filtered = filtered.filter(h=>matchesDateFilter(h.ts, dateFilter));
   if(serviceFilter) filtered = filtered.filter(h=>h.service===serviceFilter);
+  if(searchTerm){
+    filtered = filtered.filter(h=>{
+      const hay = [h.service, h.package, h.account, h.detail, h.note].join(' ').toLowerCase();
+      return hay.includes(searchTerm);
+    });
+  }
 
   if(filtered.length === 0){
     list.innerHTML = '<div style="color:var(--muted); padding:16px 0; text-align:center;">ຍັງບໍ່ມີປະຫວັດ</div>';
@@ -1591,7 +1732,7 @@ function renderHistory(){
           <div style="flex:1;">
             <span class="htype ${h.type}">${escapeHtml(meta.label)}</span>
             <div class="hmain" style="margin-top:6px;"><span style="color:${getServiceColor(h.service)};">${escapeHtml(h.service||'-')}</span>${h.package ? ' · '+escapeHtml(h.package) : ''}</div>
-            ${!isClaim ? `<div class="hsub">${escapeHtml(meta.verb)}${h.account ? ' · ໄອດີ '+escapeHtml(h.account) : ''}</div>` : ''}
+            ${!isClaim ? `<div class="hsub">${h.detail ? escapeHtml(h.detail) : escapeHtml(meta.verb)}${h.account ? ' · ໄອດີ '+escapeHtml(h.account) : ''}</div>` : ''}
           </div>
           <div class="htime">${formatRelativeDateTime(h.ts)}</div>
         </div>
@@ -1897,6 +2038,7 @@ function render(){
     card.innerHTML = `
       <div class="card-top">
         <div class="card-title">
+          <input type="checkbox" class="card-select" data-select-id="${it.id}" ${selectedItemIds.has(it.id)?'checked':''}>
           <div class="avatar" style="background:${color}">${escapeHtml((it.service||'?').trim().charAt(0).toUpperCase())}</div>
           <div>
             <div class="service">${escapeHtml(it.service||'-')}</div>
@@ -1945,10 +2087,29 @@ function render(){
           <button class="copy" data-otp-webhook-save="${it.id}">ບັນທຶກ</button>
         </div>
         ${it.otpWebhookUrl ? `<button class="btn small" data-otp-fetch-now="${it.id}" style="width:100%; margin-top:6px;" ${anyLoading?'disabled':''}>⚡ ${anyLoading ? 'ກຳລັງດຶງ...' : 'ດຶງທັງໝົດຕອນນີ້ເລີຍ (ບໍ່ຕ້ອງລໍ)'}</button>` : ''}
+        ${(()=>{
+          const hist = activityLog.filter(h=>h.itemId===it.id && ['otp_received','otp_expired','household_received'].includes(h.type)).slice(0, 5);
+          if(hist.length === 0) return '';
+          return `<div class="otp-mini-history">
+            <div class="otp-mini-history-title">📜 ປະຫວັດ OTP ຂອງໄອດີນີ້</div>
+            ${hist.map(h=>{
+              const meta = HISTORY_LABELS[h.type] || { label: h.type };
+              return `<div class="otp-mini-history-row"><span class="htype ${h.type}">${escapeHtml(meta.label)}</span> ${formatDateTime(h.ts)}</div>`;
+            }).join('')}
+          </div>`;
+        })()}
       </div>`;
       })() : ''}
       <button class="btn ghost small" data-copyall="${it.id}" style="width:100%; margin-top:8px;">ກ໊ອບປີ້ທັງໝົດ (ໄອດີ+ລະຫັດ+ໂນ໊ດ)</button>
       ${it.note ? `<div class="note">${escapeHtml(it.note)}</div>` : ''}
+      ${(()=>{
+        const claims = activityLog.filter(h=>h.itemId===it.id && h.type==='claim');
+        if(claims.length === 0) return '';
+        return `<div class="otp-mini-history">
+          <div class="otp-mini-history-title">🛒 ປະຫວັດການຊື້ໄອດີນີ້</div>
+          ${claims.map(h=>`<div class="otp-mini-history-row"><span class="htype claim">ຊື້/ຮັບໄອດີ</span> ${formatDateTime(h.ts)}</div>`).join('')}
+        </div>`;
+      })()}
       <div class="meta">
         <span>${it.customer ? 'ລູກຄ້າ: '+escapeHtml(it.customer) : (it.price ? 'ຂາຍ '+it.price+' ກີບ' : '')}</span>
         <span class="exp ${expClass}">${expText}</span>
@@ -2039,6 +2200,40 @@ function render(){
   });
   list.querySelectorAll('[data-del]').forEach(btn=>{
     btn.addEventListener('click', ()=> requestDelete(btn.getAttribute('data-del')));
+  });
+  list.querySelectorAll('[data-select-id]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const id = cb.getAttribute('data-select-id');
+      if(cb.checked) selectedItemIds.add(id);
+      else selectedItemIds.delete(id);
+      updateBulkBar();
+    });
+  });
+  updateBulkBar();
+}
+
+function updateBulkBar(){
+  const bar = document.getElementById('bulkActionBar');
+  if(!bar) return;
+  if(selectedItemIds.size === 0){
+    bar.style.display = 'none';
+    bar.innerHTML = '';
+    return;
+  }
+  bar.style.display = 'flex';
+  bar.innerHTML = `
+    <span class="bulk-count">✅ ເລືອກແລ້ວ ${selectedItemIds.size} ລາຍການ</span>
+    <div class="bulk-btns">
+      <button class="btn ghost small" id="bulkClearBtn">ຍົກເລີກການເລືອກ</button>
+      <button class="btn danger small" id="bulkDeleteBtn">ລຶບທີ່ເລືອກ</button>
+    </div>`;
+  document.getElementById('bulkClearBtn').addEventListener('click', ()=>{
+    selectedItemIds.clear();
+    renderAll();
+  });
+  document.getElementById('bulkDeleteBtn').addEventListener('click', ()=>{
+    document.getElementById('bulkDeleteTitle').textContent = `ລຶບ ${selectedItemIds.size} ລາຍການທີ່ເລືອກ ແທ້ບໍ່?`;
+    document.getElementById('bulkDeleteConfirmOverlay').classList.add('open');
   });
 }
 
@@ -2370,7 +2565,19 @@ document.getElementById('addBtn').addEventListener('click', ()=>openSheet(null))
 document.getElementById('cancelBtn').addEventListener('click', closeSheet);
 document.getElementById('saveBtn').addEventListener('click', saveForm);
 document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeSheet(); });
-document.getElementById('search').addEventListener('input', ()=>{ stockPage = 1; renderAll(); });
+document.getElementById('search').addEventListener('input', ()=>{
+  stockPage = 1;
+  document.getElementById('searchClearBtn').style.display = document.getElementById('search').value ? 'flex' : 'none';
+  renderAll();
+});
+document.getElementById('searchClearBtn').addEventListener('click', ()=>{
+  const searchInput = document.getElementById('search');
+  searchInput.value = '';
+  document.getElementById('searchClearBtn').style.display = 'none';
+  stockPage = 1;
+  renderAll();
+  searchInput.focus();
+});
 document.getElementById('filter-status').addEventListener('change', ()=>{ stockPage = 1; renderAll(); });
 document.getElementById('historyBtn').addEventListener('click', ()=>{
   document.getElementById('historyTitle').textContent = 'ປະຫວັດການຊື້/ແກ້ໄຂ';
@@ -2378,6 +2585,8 @@ document.getElementById('historyBtn').addEventListener('click', ()=>{
   document.getElementById('historyFilter').value = '';
   document.getElementById('historyDateFilter').value = '';
   document.getElementById('historyServiceFilter').value = '';
+  document.getElementById('historySearch').value = '';
+  document.getElementById('historySearchClearBtn').style.display = 'none';
   historyPage = 1;
   renderHistory();
   document.getElementById('historyOverlay').classList.add('open');
@@ -2388,12 +2597,27 @@ document.getElementById('employeeHistoryBtn').addEventListener('click', ()=>{
   document.getElementById('historyFilter').value = 'claim';
   document.getElementById('historyDateFilter').value = '';
   document.getElementById('historyServiceFilter').value = '';
+  document.getElementById('historySearch').value = '';
+  document.getElementById('historySearchClearBtn').style.display = 'none';
   historyPage = 1;
   renderHistory();
   document.getElementById('historyOverlay').classList.add('open');
 });
 document.getElementById('historyFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
 document.getElementById('historyDateFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
+document.getElementById('historySearch').addEventListener('input', ()=>{
+  historyPage = 1;
+  document.getElementById('historySearchClearBtn').style.display = document.getElementById('historySearch').value ? 'flex' : 'none';
+  renderHistory();
+});
+document.getElementById('historySearchClearBtn').addEventListener('click', ()=>{
+  const input = document.getElementById('historySearch');
+  input.value = '';
+  document.getElementById('historySearchClearBtn').style.display = 'none';
+  historyPage = 1;
+  renderHistory();
+  input.focus();
+});
 
 document.getElementById('otpLookupBtn').addEventListener('click', openOtpLookup);
 document.getElementById('otpLookupSearchBtn').addEventListener('click', searchOtpLookup);
@@ -2426,6 +2650,23 @@ document.getElementById('deleteConfirmBtn').addEventListener('click', async ()=>
   renderAll();
   document.getElementById('deleteConfirmOverlay').classList.remove('open');
   toast('ລຶບແລ້ວ');
+});
+
+document.getElementById('bulkDeleteCancelBtn').addEventListener('click', ()=>{
+  document.getElementById('bulkDeleteConfirmOverlay').classList.remove('open');
+});
+document.getElementById('bulkDeleteConfirmOverlay').addEventListener('click', (e)=>{ if(e.target.id==='bulkDeleteConfirmOverlay') e.currentTarget.classList.remove('open'); });
+document.getElementById('bulkDeleteConfirmBtn').addEventListener('click', async ()=>{
+  const idsToDelete = Array.from(selectedItemIds);
+  if(idsToDelete.length === 0){ document.getElementById('bulkDeleteConfirmOverlay').classList.remove('open'); return; }
+  const deletedItems = items.filter(i=>idsToDelete.includes(i.id));
+  items = items.filter(i=>!idsToDelete.includes(i.id));
+  selectedItemIds.clear();
+  await saveItems();
+  deletedItems.forEach(d=>logActivity('delete', d));
+  renderAll();
+  document.getElementById('bulkDeleteConfirmOverlay').classList.remove('open');
+  toast(`ລຶບ ${deletedItems.length} ລາຍການແລ້ວ`);
 });
 
 document.getElementById('orderAuthCancelBtn').addEventListener('click', ()=>{
