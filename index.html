@@ -1531,6 +1531,18 @@ async function toggleGmailBackupUsed(id, code){
   renderAll();
 }
 
+async function markGmailBackupUsed(id, code){
+  const idx = items.findIndex(i=>i.id===id);
+  if(idx === -1) return;
+  const item = items[idx];
+  if(!item.gmailBackupUsedCodes) item.gmailBackupUsedCodes = {};
+  if(item.gmailBackupUsedCodes[code]) return; // ໝາຍໄວ້ແລ້ວ ບໍ່ຕ້ອງເຮັດຊ້ຳ
+  item.gmailBackupUsedCodes[code] = Date.now();
+  logActivity('gmail_backup_used', item, `ໃຊ້ລະຫັດສຳຮອງ: ${code}`);
+  await saveItems();
+  renderAll();
+}
+
 function buildGmailBackupCodeRowsHtml(it, codes){
   const used = it.gmailBackupUsedCodes || {};
   return codes.map(c=>{
@@ -1540,7 +1552,7 @@ function buildGmailBackupCodeRowsHtml(it, codes){
       <span class="v" style="font-family:var(--font-mono); font-weight:700;">${escapeHtml(c)}</span>
       <div style="display:flex; align-items:center; gap:8px;">
         ${isUsed ? `<span class="gmail-backup-used-tag">✅ ໃຊ້ແລ້ວ · ${formatRelativeDateTime(used[c])}</span>` : ''}
-        <button class="copy" data-copy="${escapeHtml(c)}">ກ໊ອບປີ້</button>
+        <button class="copy" data-gmailbackup-copy="${key}">ກ໊ອບປີ້</button>
         <button class="btn ghost small" data-gmailbackup-toggle="${key}">${isUsed ? 'ຍົກເລີກ' : '✓ ໃຊ້ແລ້ວ'}</button>
       </div>
     </div>`;
@@ -2848,10 +2860,18 @@ document.getElementById('gmailBackupLookupCloseBtn').addEventListener('click', (
 document.getElementById('gmailBackupLookupOverlay').addEventListener('click', (e)=>{ if(e.target.id==='gmailBackupLookupOverlay') e.currentTarget.classList.remove('open'); });
 
 document.addEventListener('click', (e)=>{
-  const btn = e.target.closest('[data-gmailbackup-toggle]');
-  if(!btn) return;
-  const [itemId, code] = btn.getAttribute('data-gmailbackup-toggle').split('::');
-  toggleGmailBackupUsed(itemId, code);
+  const copyBtn = e.target.closest('[data-gmailbackup-copy]');
+  if(copyBtn){
+    const [itemId, code] = copyBtn.getAttribute('data-gmailbackup-copy').split('::');
+    copyToClipboard(code);
+    markGmailBackupUsed(itemId, code);
+    return;
+  }
+  const toggleBtn = e.target.closest('[data-gmailbackup-toggle]');
+  if(toggleBtn){
+    const [itemId, code] = toggleBtn.getAttribute('data-gmailbackup-toggle').split('::');
+    toggleGmailBackupUsed(itemId, code);
+  }
 });
 document.getElementById('historyServiceFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
 document.getElementById('historyCloseBtn').addEventListener('click', ()=> document.getElementById('historyOverlay').classList.remove('open'));
