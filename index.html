@@ -658,6 +658,15 @@
     min-width: 0;
   }
   .otp-input:focus{ outline: none; border-color: var(--accent); }
+  .gmail-backup-textarea{
+    width: 100%;
+    min-height: 70px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  .gmail-backup-box{
+    border-color: var(--accent-3);
+  }
   .copy{
     background: none;
     border: none;
@@ -964,7 +973,7 @@
   <div class="chip-filter-row" id="serviceChips"></div>
   <div class="chip-filter-row" id="durationChips"></div>
 
-  <div id="bulkActionBar" class="bulk-action-bar" style="display:none;"></div>
+  <div id="bulkActionBar" class="bulk-action-bar"></div>
 
   <div id="stockPaginationTop" class="pagination-row"></div>
   <div id="list" class="grid"></div>
@@ -1441,6 +1450,16 @@ async function updateItemLinkField(id, type, urlValue){
   await saveItems();
   renderAll();
   toast('ອັບເດດ' + meta.label + 'ແລ້ວ');
+}
+
+async function updateItemGmailBackup(id, codesValue){
+  const idx = items.findIndex(i=>i.id===id);
+  if(idx === -1) return;
+  items[idx].gmailBackupCodes = codesValue.trim();
+  items[idx].gmailBackupUpdatedAt = Date.now();
+  await saveItems();
+  renderAll();
+  toast('ບັນທຶກລະຫັດ Gmail ສຳຮອງແລ້ວ');
 }
 
 async function updateItemOtpWebhook(id, urlValue){
@@ -2100,6 +2119,14 @@ function render(){
         })()}
       </div>`;
       })() : ''}
+      <div class="otp-box gmail-backup-box">
+        <div class="otp-box-label">🔐 ລະຫັດ Gmail ສຳຮອງ (8 ຫຼັກ) ${it.gmailBackupUpdatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(it.gmailBackupUpdatedAt)}</span>` : ''}</div>
+        <textarea class="otp-input gmail-backup-textarea" data-gmailbackup-input="${it.id}" placeholder="ວາງລະຫັດສຳຮອງທັງໝົດ (ແຖວລະ 1 ລະຫັດ) ຈາກ Google 2-Step Verification">${escapeHtml(it.gmailBackupCodes||'')}</textarea>
+        <div class="row" style="margin-top:6px;">
+          <button class="copy" data-gmailbackup-save="${it.id}">ບັນທຶກ</button>
+          ${it.gmailBackupCodes ? `<button class="copy" data-copy="${escapeHtml(it.gmailBackupCodes)}">ກ໊ອບປີ້ທັງໝົດ</button>` : ''}
+        </div>
+      </div>
       <button class="btn ghost small" data-copyall="${it.id}" style="width:100%; margin-top:8px;">ກ໊ອບປີ້ທັງໝົດ (ໄອດີ+ລະຫັດ+ໂນ໊ດ)</button>
       ${it.note ? `<div class="note">${escapeHtml(it.note)}</div>` : ''}
       ${(()=>{
@@ -2192,6 +2219,13 @@ function render(){
   list.querySelectorAll('[data-otp-fetch-now]').forEach(btn=>{
     btn.addEventListener('click', ()=> fetchOtpNow(btn.getAttribute('data-otp-fetch-now')));
   });
+  list.querySelectorAll('[data-gmailbackup-save]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.getAttribute('data-gmailbackup-save');
+      const input = list.querySelector(`[data-gmailbackup-input="${id}"]`);
+      if(input) updateItemGmailBackup(id, input.value);
+    });
+  });
   list.querySelectorAll('[data-edit]').forEach(btn=>{
     btn.addEventListener('click', ()=> openSheet(btn.getAttribute('data-edit')));
   });
@@ -2206,35 +2240,45 @@ function render(){
       const id = cb.getAttribute('data-select-id');
       if(cb.checked) selectedItemIds.add(id);
       else selectedItemIds.delete(id);
-      updateBulkBar();
+      updateBulkBar(filtered.map(it=>it.id));
     });
   });
-  updateBulkBar();
+  updateBulkBar(filtered.map(it=>it.id));
 }
 
-function updateBulkBar(){
+function updateBulkBar(filteredIds){
   const bar = document.getElementById('bulkActionBar');
   if(!bar) return;
-  if(selectedItemIds.size === 0){
-    bar.style.display = 'none';
-    bar.innerHTML = '';
-    return;
-  }
+  filteredIds = filteredIds || [];
+  const allSelected = filteredIds.length > 0 && filteredIds.every(id=>selectedItemIds.has(id));
+
   bar.style.display = 'flex';
   bar.innerHTML = `
-    <span class="bulk-count">✅ ເລືອກແລ້ວ ${selectedItemIds.size} ລາຍການ</span>
+    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+      <input type="checkbox" class="card-select" id="bulkSelectAllCb" ${allSelected?'checked':''} ${filteredIds.length===0?'disabled':''}>
+      <span class="bulk-count">${selectedItemIds.size > 0 ? `✅ ເລືອກແລ້ວ ${selectedItemIds.size} ລາຍການ` : `ເລືອກທັງໝົດ (${filteredIds.length} ລາຍການ)`}</span>
+    </label>
+    ${selectedItemIds.size > 0 ? `
     <div class="bulk-btns">
       <button class="btn ghost small" id="bulkClearBtn">ຍົກເລີກການເລືອກ</button>
       <button class="btn danger small" id="bulkDeleteBtn">ລຶບທີ່ເລືອກ</button>
-    </div>`;
-  document.getElementById('bulkClearBtn').addEventListener('click', ()=>{
-    selectedItemIds.clear();
+    </div>` : ''}`;
+
+  document.getElementById('bulkSelectAllCb').addEventListener('change', (e)=>{
+    if(e.target.checked){ filteredIds.forEach(id=>selectedItemIds.add(id)); }
+    else{ filteredIds.forEach(id=>selectedItemIds.delete(id)); }
     renderAll();
   });
-  document.getElementById('bulkDeleteBtn').addEventListener('click', ()=>{
-    document.getElementById('bulkDeleteTitle').textContent = `ລຶບ ${selectedItemIds.size} ລາຍການທີ່ເລືອກ ແທ້ບໍ່?`;
-    document.getElementById('bulkDeleteConfirmOverlay').classList.add('open');
-  });
+  if(selectedItemIds.size > 0){
+    document.getElementById('bulkClearBtn').addEventListener('click', ()=>{
+      selectedItemIds.clear();
+      renderAll();
+    });
+    document.getElementById('bulkDeleteBtn').addEventListener('click', ()=>{
+      document.getElementById('bulkDeleteTitle').textContent = `ລຶບ ${selectedItemIds.size} ລາຍການທີ່ເລືອກ ແທ້ບໍ່?`;
+      document.getElementById('bulkDeleteConfirmOverlay').classList.add('open');
+    });
+  }
 }
 
 let pendingDeleteId = null;
