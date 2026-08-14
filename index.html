@@ -681,6 +681,23 @@
     border: 1px solid var(--line);
     border-radius: 6px;
     padding: 6px 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .gmail-backup-code-row.used{
+    background: var(--ok-dim);
+    border-color: var(--ok);
+    opacity: 0.75;
+  }
+  .gmail-backup-code-row.used .v{
+    text-decoration: line-through;
+    color: var(--muted);
+  }
+  .gmail-backup-used-tag{
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ok);
+    white-space: nowrap;
   }
   .copy{
     background: none;
@@ -1499,6 +1516,37 @@ async function updateItemGmailBackup(id, codesValue){
   toast('ບັນທຶກລະຫັດ Gmail ສຳຮອງແລ້ວ');
 }
 
+async function toggleGmailBackupUsed(id, code){
+  const idx = items.findIndex(i=>i.id===id);
+  if(idx === -1) return;
+  const item = items[idx];
+  if(!item.gmailBackupUsedCodes) item.gmailBackupUsedCodes = {};
+  if(item.gmailBackupUsedCodes[code]){
+    delete item.gmailBackupUsedCodes[code];
+  } else {
+    item.gmailBackupUsedCodes[code] = Date.now();
+    logActivity('gmail_backup_used', item, `ໃຊ້ລະຫັດສຳຮອງ: ${code}`);
+  }
+  await saveItems();
+  renderAll();
+}
+
+function buildGmailBackupCodeRowsHtml(it, codes){
+  const used = it.gmailBackupUsedCodes || {};
+  return codes.map(c=>{
+    const isUsed = !!used[c];
+    const key = escapeHtml(it.id) + '::' + escapeHtml(c);
+    return `<div class="gmail-backup-code-row ${isUsed?'used':''}">
+      <span class="v" style="font-family:var(--font-mono); font-weight:700;">${escapeHtml(c)}</span>
+      <div style="display:flex; align-items:center; gap:8px;">
+        ${isUsed ? `<span class="gmail-backup-used-tag">✅ ໃຊ້ແລ້ວ · ${formatRelativeDateTime(used[c])}</span>` : ''}
+        <button class="copy" data-copy="${escapeHtml(c)}">ກ໊ອບປີ້</button>
+        <button class="btn ghost small" data-gmailbackup-toggle="${key}">${isUsed ? 'ຍົກເລີກ' : '✓ ໃຊ້ແລ້ວ'}</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 async function updateItemOtpWebhook(id, urlValue){
   const idx = items.findIndex(i=>i.id===id);
   if(idx === -1) return;
@@ -1683,11 +1731,12 @@ function renderGmailBackupLookupResult(){
   }
 
   const codes = it.gmailBackupCodes.split('\n').map(c=>c.trim()).filter(Boolean);
+  const usedCount = codes.filter(c=>(it.gmailBackupUsedCodes||{})[c]).length;
   result.innerHTML = `
     <div class="otp-box gmail-backup-box">
-      <div class="otp-box-label">🔐 ລະຫັດ Gmail ສຳຮອງ ${it.gmailBackupUpdatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(it.gmailBackupUpdatedAt)}</span>` : ''}</div>
+      <div class="otp-box-label">🔐 ລະຫັດ Gmail ສຳຮອງ ${it.gmailBackupUpdatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(it.gmailBackupUpdatedAt)}</span>` : ''} <span style="font-weight:400; color:var(--muted);">· ໃຊ້ແລ້ວ ${usedCount}/${codes.length}</span></div>
       <div class="gmail-backup-code-list">
-        ${codes.map(c=>`<div class="gmail-backup-code-row"><span class="v" style="font-family:var(--font-mono); font-weight:700;">${escapeHtml(c)}</span><button class="copy" data-copy="${escapeHtml(c)}">ກ໊ອບປີ້</button></div>`).join('')}
+        ${buildGmailBackupCodeRowsHtml(it, codes)}
       </div>
       <button class="btn small" id="gmailBackupCopyAllBtn" style="width:100%; margin-top:8px;">ກ໊ອບປີ້ທັງໝົດ</button>
     </div>`;
@@ -1753,6 +1802,7 @@ const HISTORY_LABELS = {
   otp_received: { label: 'ໄດ້ຮັບ OTP', verb: 'ໄດ້ຮັບລະຫັດ OTP ໃໝ່' },
   otp_expired: { label: 'OTP ໝົດອາຍຸ', verb: 'ລະຫັດ OTP ໝົດອາຍຸ ຖືກລຶບອອກອັດຕະໂນມັດ' },
   household_received: { label: 'ໄດ້ຮັບລິງກ໌ Household', verb: 'ໄດ້ຮັບລິງກ໌ Household ໃໝ່' },
+  gmail_backup_used: { label: 'ໃຊ້ລະຫັດສຳຮອງ', verb: 'ໝາຍລະຫັດ Gmail ສຳຮອງເປັນໃຊ້ແລ້ວ' },
 };
 
 const HISTORY_PAGE_SIZE = 8;
@@ -2224,6 +2274,23 @@ function render(){
           <button class="copy" data-gmailbackup-save="${it.id}">ບັນທຶກ</button>
           ${it.gmailBackupCodes ? `<button class="copy" data-copy="${escapeHtml(it.gmailBackupCodes)}">ກ໊ອບປີ້ທັງໝົດ</button>` : ''}
         </div>
+        ${(()=>{
+          if(!it.gmailBackupCodes) return '';
+          const codes = it.gmailBackupCodes.split('\n').map(c=>c.trim()).filter(Boolean);
+          const usedCount = codes.filter(c=>(it.gmailBackupUsedCodes||{})[c]).length;
+          return `<div class="gmail-backup-code-list" style="margin-top:10px;">
+            <div style="font-size:11px; color:var(--muted); margin-bottom:4px;">ໃຊ້ແລ້ວ ${usedCount}/${codes.length}</div>
+            ${buildGmailBackupCodeRowsHtml(it, codes)}
+          </div>`;
+        })()}
+        ${(()=>{
+          const hist = activityLog.filter(h=>h.itemId===it.id && h.type==='gmail_backup_used').slice(0, 5);
+          if(hist.length === 0) return '';
+          return `<div class="otp-mini-history">
+            <div class="otp-mini-history-title">📜 ປະຫວັດການໃຊ້ລະຫັດສຳຮອງ</div>
+            ${hist.map(h=>`<div class="otp-mini-history-row"><span class="htype gmail_backup_used" style="background:rgba(31,157,92,0.14); color:var(--ok);">${escapeHtml(h.detail||'ໃຊ້ລະຫັດ')}</span> ${formatDateTime(h.ts)}</div>`).join('')}
+          </div>`;
+        })()}
       </div>` : ''}
       <button class="btn ghost small" data-copyall="${it.id}" style="width:100%; margin-top:8px;">ກ໊ອບປີ້ທັງໝົດ (ໄອດີ+ລະຫັດ+ໂນ໊ດ)</button>
       ${it.note ? `<div class="note">${escapeHtml(it.note)}</div>` : ''}
@@ -2779,6 +2846,13 @@ document.getElementById('gmailBackupLookupSearchBtn').addEventListener('click', 
 document.getElementById('gmailbackup-lookup-email').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') searchGmailBackupLookup(); });
 document.getElementById('gmailBackupLookupCloseBtn').addEventListener('click', ()=> document.getElementById('gmailBackupLookupOverlay').classList.remove('open'));
 document.getElementById('gmailBackupLookupOverlay').addEventListener('click', (e)=>{ if(e.target.id==='gmailBackupLookupOverlay') e.currentTarget.classList.remove('open'); });
+
+document.addEventListener('click', (e)=>{
+  const btn = e.target.closest('[data-gmailbackup-toggle]');
+  if(!btn) return;
+  const [itemId, code] = btn.getAttribute('data-gmailbackup-toggle').split('::');
+  toggleGmailBackupUsed(itemId, code);
+});
 document.getElementById('historyServiceFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
 document.getElementById('historyCloseBtn').addEventListener('click', ()=> document.getElementById('historyOverlay').classList.remove('open'));
 document.getElementById('historyOverlay').addEventListener('click', (e)=>{ if(e.target.id==='historyOverlay') e.currentTarget.classList.remove('open'); });
