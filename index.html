@@ -1666,10 +1666,11 @@ function renderGmailBackupLookupResult(){
   if(!overlay || !overlay.classList.contains('open') || !gmailBackupLookupEmail) return;
 
   const result = document.getElementById('gmailBackupLookupResult');
-  const it = items.find(i=>
+  const matches = items.filter(i=>
     getServiceCategory(i.service) === 'ແອັບໜັງສັ້ນ' &&
     String(i.account||'').trim().toLowerCase()===gmailBackupLookupEmail.toLowerCase()
   );
+  const it = matches.find(i=>i.gmailBackupCodes) || matches[0];
 
   if(!it){
     result.innerHTML = `<div style="color:var(--muted); padding:10px 0;">ບໍ່ພົບໄອດີແອັບໜັງສັ້ນທີ່ຕົງກັບອີເມວນີ້ໃນລະບົບ</div>`;
