@@ -699,6 +699,34 @@
     color: var(--ok);
     white-space: nowrap;
   }
+  .gmail-overview-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .gmail-overview-row.low{ border-left-color: var(--danger); }
+  .gmail-overview-row.mid{ border-left-color: var(--warn); }
+  .gmail-overview-row.ok{ border-left-color: var(--ok); }
+  .gmail-overview-info .service{ font-size: 14px; }
+  .gmail-overview-info .email{ font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+  .gmail-overview-remain{
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 15px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .gmail-overview-remain.low{ background: var(--danger-dim); color: var(--danger); }
+  .gmail-overview-remain.mid{ background: var(--warn-dim); color: var(--warn); }
+  .gmail-overview-remain.ok{ background: var(--ok-dim); color: var(--ok); }
   .copy{
     background: none;
     border: none;
@@ -988,6 +1016,7 @@
   </div>
 
   <button class="btn ghost small" id="historyBtn" style="margin-bottom:14px;">📜 ເບິ່ງປະຫວັດການຊື້/ແກ້ໄຂ</button>
+  <button class="btn ghost small" id="gmailBackupOverviewBtn" style="margin-bottom:14px; margin-left:8px;">📊 ພາບລວມລະຫັດ Gmail ສຳຮອງ</button>
 
   <div class="toolbar">
     <div class="search-wrap">
@@ -1237,6 +1266,21 @@
     <div id="gmailBackupLookupResult"></div>
     <div class="sheet-actions">
       <button class="btn ghost" id="gmailBackupLookupCloseBtn">ປິດ</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="gmailBackupOverviewOverlay">
+  <div class="sheet">
+    <h2>📊 ພາບລວມລະຫັດ Gmail ສຳຮອງ</h2>
+    <p style="color:var(--muted); font-size:12px; margin-top:-8px;">ຮຽງຈາກເຫຼືອໜ້ອຍສຸດ → ຫຼາຍສຸດ ໃຫ້ເຫັນຊັດວ່າອັນໃດໃກ້ໝົດ</p>
+    <div class="search-wrap" style="margin-bottom:10px;">
+      <input class="search" id="gmailBackupOverviewSearch" placeholder="ຄົ້ນຫາ ອີເມວ / ແອັບ...">
+      <button type="button" class="search-clear" id="gmailBackupOverviewSearchClearBtn" style="display:none;" title="ລຶບຄຳຄົ້ນຫາ">×</button>
+    </div>
+    <div id="gmailBackupOverviewList"></div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="gmailBackupOverviewCloseBtn">ປິດ</button>
     </div>
   </div>
 </div>
@@ -1757,6 +1801,65 @@ function renderGmailBackupLookupResult(){
     btn.addEventListener('click', ()=> copyToClipboard(btn.getAttribute('data-copy')));
   });
   document.getElementById('gmailBackupCopyAllBtn').addEventListener('click', ()=> copyToClipboard(codes.join('\n')));
+}
+
+// ============================================================
+// GMAIL BACKUP OVERVIEW — ໜ້າແອັດມິນ: ເບິ່ງພາບລວມທຸກອີເມວທີ່ມີລະຫັດສຳຮອງ
+// ຮຽງໃຫ້ເຫັນວ່າອັນໃດເຫຼືອໜ້ອຍ (ໃກ້ໝົດ) ກ່ອນ
+// ============================================================
+function openGmailBackupOverview(){
+  document.getElementById('gmailBackupOverviewSearch').value = '';
+  document.getElementById('gmailBackupOverviewSearchClearBtn').style.display = 'none';
+  renderGmailBackupOverview();
+  document.getElementById('gmailBackupOverviewOverlay').classList.add('open');
+}
+
+function renderGmailBackupOverview(){
+  const overlay = document.getElementById('gmailBackupOverviewOverlay');
+  if(!overlay || !overlay.classList.contains('open')) return;
+
+  const searchTerm = document.getElementById('gmailBackupOverviewSearch').value.trim().toLowerCase();
+  const list = document.getElementById('gmailBackupOverviewList');
+
+  let rows = items.filter(i=>
+    getServiceCategory(i.service) === 'ແອັບໜັງສັ້ນ' &&
+    i.gmailBackupCodes && i.gmailBackupCodes.trim()
+  ).map(it=>{
+    const codes = it.gmailBackupCodes.split('\n').map(c=>c.trim()).filter(Boolean);
+    const usedCount = codes.filter(c=>(it.gmailBackupUsedCodes||{})[c]).length;
+    const remaining = codes.length - usedCount;
+    return { it, total: codes.length, used: usedCount, remaining };
+  });
+
+  if(searchTerm){
+    rows = rows.filter(r=>{
+      const hay = [r.it.service, r.it.package, r.it.account].join(' ').toLowerCase();
+      return hay.includes(searchTerm);
+    });
+  }
+
+  rows.sort((a,b)=> a.remaining - b.remaining);
+
+  if(rows.length === 0){
+    list.innerHTML = `<div style="color:var(--muted); padding:16px 0; text-align:center;">ຍັງບໍ່ມີໄອດີແອັບໜັງສັ້ນທີ່ບັນທຶກລະຫັດ Gmail ສຳຮອງໄວ້</div>`;
+    return;
+  }
+
+  list.innerHTML = rows.map(r=>{
+    const level = r.remaining <= 2 ? 'low' : (r.remaining <= 4 ? 'mid' : 'ok');
+    const color = getServiceColor(r.it.service);
+    return `
+      <div class="gmail-overview-row ${level}">
+        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+          <div class="avatar" style="background:${color}; flex-shrink:0;">${escapeHtml((r.it.service||'?').trim().charAt(0).toUpperCase())}</div>
+          <div class="gmail-overview-info" style="min-width:0;">
+            <div class="service">${escapeHtml(r.it.service||'-')}${r.it.package ? ' · '+escapeHtml(r.it.package) : ''}</div>
+            <div class="email">${escapeHtml(r.it.account||'-')}</div>
+          </div>
+        </div>
+        <span class="gmail-overview-remain ${level}">ເຫຼືອ ${r.remaining}/${r.total}</span>
+      </div>`;
+  }).join('');
 }
 
 async function saveLog(){
@@ -2469,6 +2572,7 @@ function renderAll(){
   renderTiles();
   renderOtpLookupResult();
   renderGmailBackupLookupResult();
+  renderGmailBackupOverview();
 }
 
 function getServiceCategory(name){
@@ -2858,6 +2962,21 @@ document.getElementById('gmailBackupLookupSearchBtn').addEventListener('click', 
 document.getElementById('gmailbackup-lookup-email').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') searchGmailBackupLookup(); });
 document.getElementById('gmailBackupLookupCloseBtn').addEventListener('click', ()=> document.getElementById('gmailBackupLookupOverlay').classList.remove('open'));
 document.getElementById('gmailBackupLookupOverlay').addEventListener('click', (e)=>{ if(e.target.id==='gmailBackupLookupOverlay') e.currentTarget.classList.remove('open'); });
+
+document.getElementById('gmailBackupOverviewBtn').addEventListener('click', openGmailBackupOverview);
+document.getElementById('gmailBackupOverviewCloseBtn').addEventListener('click', ()=> document.getElementById('gmailBackupOverviewOverlay').classList.remove('open'));
+document.getElementById('gmailBackupOverviewOverlay').addEventListener('click', (e)=>{ if(e.target.id==='gmailBackupOverviewOverlay') e.currentTarget.classList.remove('open'); });
+document.getElementById('gmailBackupOverviewSearch').addEventListener('input', ()=>{
+  document.getElementById('gmailBackupOverviewSearchClearBtn').style.display = document.getElementById('gmailBackupOverviewSearch').value ? 'flex' : 'none';
+  renderGmailBackupOverview();
+});
+document.getElementById('gmailBackupOverviewSearchClearBtn').addEventListener('click', ()=>{
+  const input = document.getElementById('gmailBackupOverviewSearch');
+  input.value = '';
+  document.getElementById('gmailBackupOverviewSearchClearBtn').style.display = 'none';
+  renderGmailBackupOverview();
+  input.focus();
+});
 
 document.addEventListener('click', (e)=>{
   const copyBtn = e.target.closest('[data-gmailbackup-copy]');
