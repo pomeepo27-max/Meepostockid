@@ -667,6 +667,21 @@
   .gmail-backup-box{
     border-color: var(--accent-3);
   }
+  .gmail-backup-code-list{
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .gmail-backup-code-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 10px;
+  }
   .copy{
     background: none;
     border: none;
@@ -930,6 +945,7 @@
     </div>
     <div style="display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; justify-content:flex-end;">
       <button class="btn ghost small" id="otpLookupBtn" title="ດຶງລະຫັດ OTP Netflix">🔑 OTP</button>
+      <button class="btn ghost small" id="gmailBackupLookupBtn" title="ຄົ້ນຫາລະຫັດ Gmail ສຳຮອງ (ແອັບໜັງສັ້ນ)">🔐 8 ຫຼັກ</button>
       <button class="btn ghost small" id="darkModeToggle" title="ສະຫຼັບໂໝດມືດ/ສະຫວ່າງ">🌙</button>
       <button class="btn ghost small" id="modeToggle">ໂໝດແອັດມິນ</button>
     </div>
@@ -1183,6 +1199,27 @@
     <div id="otpLookupResult"></div>
     <div class="sheet-actions">
       <button class="btn ghost" id="otpLookupCloseBtn">ປິດ</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="gmailBackupLookupOverlay">
+  <div class="sheet netflix-tool-sheet">
+    <div class="netflix-tool-header">
+      <div class="netflix-tool-icon" style="background:var(--accent-3);">🔐</div>
+      <div>
+        <h2 style="margin:0;">ລະຫັດ Gmail ສຳຮອງ</h2>
+        <p style="margin:2px 0 0; color:var(--muted); font-size:12px;">ສຳລັບແອັບໜັງສັ້ນເທົ່ານັ້ນ</p>
+      </div>
+    </div>
+    <div class="field">
+      <label>ອີເມວ</label>
+      <input type="email" id="gmailbackup-lookup-email" placeholder="[email protected]">
+    </div>
+    <button class="btn" id="gmailBackupLookupSearchBtn" style="width:100%; margin-bottom:12px;">ຄົ້ນຫາ →</button>
+    <div id="gmailBackupLookupResult"></div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="gmailBackupLookupCloseBtn">ປິດ</button>
     </div>
   </div>
 </div>
@@ -1599,6 +1636,65 @@ function renderOtpLookupResult(){
   });
   const fetchBtn = document.getElementById('otpLookupFetchNowBtn');
   if(fetchBtn) fetchBtn.addEventListener('click', ()=> fetchOtpNow(it.id));
+}
+
+// ============================================================
+// GMAIL BACKUP CODE LOOKUP — ໜ້າພະນັກງານ: ໃສ່ອີເມວແອັບໜັງສັ້ນ ແລ້ວເບິ່ງລະຫັດສຳຮອງ 8 ຫຼັກ
+// ============================================================
+let gmailBackupLookupEmail = null;
+
+function openGmailBackupLookup(){
+  gmailBackupLookupEmail = null;
+  document.getElementById('gmailbackup-lookup-email').value = '';
+  document.getElementById('gmailBackupLookupResult').innerHTML = '';
+  document.getElementById('gmailBackupLookupOverlay').classList.add('open');
+}
+
+function searchGmailBackupLookup(){
+  const email = document.getElementById('gmailbackup-lookup-email').value.trim();
+  if(!email){ toast('ໃສ່ອີເມວກ່ອນເດີ້'); return; }
+  gmailBackupLookupEmail = email;
+
+  const result = document.getElementById('gmailBackupLookupResult');
+  result.innerHTML = `<div class="otp-spinner-row" style="justify-content:center; padding:16px 0;"><div class="otp-spinner"></div> ກຳລັງຄົ້ນຫາ...</div>`;
+
+  setTimeout(()=>{ renderGmailBackupLookupResult(); }, 400);
+}
+
+function renderGmailBackupLookupResult(){
+  const overlay = document.getElementById('gmailBackupLookupOverlay');
+  if(!overlay || !overlay.classList.contains('open') || !gmailBackupLookupEmail) return;
+
+  const result = document.getElementById('gmailBackupLookupResult');
+  const it = items.find(i=>
+    getServiceCategory(i.service) === 'ແອັບໜັງສັ້ນ' &&
+    String(i.account||'').trim().toLowerCase()===gmailBackupLookupEmail.toLowerCase()
+  );
+
+  if(!it){
+    result.innerHTML = `<div style="color:var(--muted); padding:10px 0;">ບໍ່ພົບໄອດີແອັບໜັງສັ້ນທີ່ຕົງກັບອີເມວນີ້ໃນລະບົບ</div>`;
+    return;
+  }
+
+  if(!it.gmailBackupCodes){
+    result.innerHTML = `<div style="color:var(--muted); padding:10px 0;">ຍັງບໍ່ມີລະຫັດ Gmail ສຳຮອງສຳລັບໄອດີນີ້ — ຕິດຕໍ່ແອັດມິນ</div>`;
+    return;
+  }
+
+  const codes = it.gmailBackupCodes.split('\n').map(c=>c.trim()).filter(Boolean);
+  result.innerHTML = `
+    <div class="otp-box gmail-backup-box">
+      <div class="otp-box-label">🔐 ລະຫັດ Gmail ສຳຮອງ ${it.gmailBackupUpdatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(it.gmailBackupUpdatedAt)}</span>` : ''}</div>
+      <div class="gmail-backup-code-list">
+        ${codes.map(c=>`<div class="gmail-backup-code-row"><span class="v" style="font-family:var(--font-mono); font-weight:700;">${escapeHtml(c)}</span><button class="copy" data-copy="${escapeHtml(c)}">ກ໊ອບປີ້</button></div>`).join('')}
+      </div>
+      <button class="btn small" id="gmailBackupCopyAllBtn" style="width:100%; margin-top:8px;">ກ໊ອບປີ້ທັງໝົດ</button>
+    </div>`;
+
+  result.querySelectorAll('[data-copy]').forEach(btn=>{
+    btn.addEventListener('click', ()=> copyToClipboard(btn.getAttribute('data-copy')));
+  });
+  document.getElementById('gmailBackupCopyAllBtn').addEventListener('click', ()=> copyToClipboard(codes.join('\n')));
 }
 
 async function saveLog(){
@@ -2119,6 +2215,7 @@ function render(){
         })()}
       </div>`;
       })() : ''}
+      ${getServiceCategory(it.service) === 'ແອັບໜັງສັ້ນ' ? `
       <div class="otp-box gmail-backup-box">
         <div class="otp-box-label">🔐 ລະຫັດ Gmail ສຳຮອງ (8 ຫຼັກ) ${it.gmailBackupUpdatedAt ? `<span style="font-weight:400; color:var(--muted);">· ອັບເດດ ${formatRelativeDateTime(it.gmailBackupUpdatedAt)}</span>` : ''}</div>
         <textarea class="otp-input gmail-backup-textarea" data-gmailbackup-input="${it.id}" placeholder="ວາງລະຫັດສຳຮອງທັງໝົດ (ແຖວລະ 1 ລະຫັດ) ຈາກ Google 2-Step Verification">${escapeHtml(it.gmailBackupCodes||'')}</textarea>
@@ -2126,7 +2223,7 @@ function render(){
           <button class="copy" data-gmailbackup-save="${it.id}">ບັນທຶກ</button>
           ${it.gmailBackupCodes ? `<button class="copy" data-copy="${escapeHtml(it.gmailBackupCodes)}">ກ໊ອບປີ້ທັງໝົດ</button>` : ''}
         </div>
-      </div>
+      </div>` : ''}
       <button class="btn ghost small" data-copyall="${it.id}" style="width:100%; margin-top:8px;">ກ໊ອບປີ້ທັງໝົດ (ໄອດີ+ລະຫັດ+ໂນ໊ດ)</button>
       ${it.note ? `<div class="note">${escapeHtml(it.note)}</div>` : ''}
       ${(()=>{
@@ -2291,6 +2388,7 @@ function renderAll(){
   render();
   renderTiles();
   renderOtpLookupResult();
+  renderGmailBackupLookupResult();
 }
 
 function getServiceCategory(name){
@@ -2675,6 +2773,11 @@ document.querySelectorAll('#otpTypeTabs .otp-type-tab').forEach(tab=>{
     if(otpLookupEmail) renderOtpLookupResult();
   });
 });
+document.getElementById('gmailBackupLookupBtn').addEventListener('click', openGmailBackupLookup);
+document.getElementById('gmailBackupLookupSearchBtn').addEventListener('click', searchGmailBackupLookup);
+document.getElementById('gmailbackup-lookup-email').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') searchGmailBackupLookup(); });
+document.getElementById('gmailBackupLookupCloseBtn').addEventListener('click', ()=> document.getElementById('gmailBackupLookupOverlay').classList.remove('open'));
+document.getElementById('gmailBackupLookupOverlay').addEventListener('click', (e)=>{ if(e.target.id==='gmailBackupLookupOverlay') e.currentTarget.classList.remove('open'); });
 document.getElementById('historyServiceFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
 document.getElementById('historyCloseBtn').addEventListener('click', ()=> document.getElementById('historyOverlay').classList.remove('open'));
 document.getElementById('historyOverlay').addEventListener('click', (e)=>{ if(e.target.id==='historyOverlay') e.currentTarget.classList.remove('open'); });
