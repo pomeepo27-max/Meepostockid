@@ -1824,9 +1824,12 @@ function renderGmailBackupLookupResult(){
 // GMAIL BACKUP OVERVIEW — ໜ້າແອັດມິນ: ເບິ່ງພາບລວມທຸກອີເມວທີ່ມີລະຫັດສຳຮອງ
 // ຮຽງໃຫ້ເຫັນວ່າອັນໃດເຫຼືອໜ້ອຍ (ໃກ້ໝົດ) ກ່ອນ
 // ============================================================
+let gmailOverviewExpanded = new Set();
+
 function openGmailBackupOverview(){
   document.getElementById('gmailBackupOverviewSearch').value = '';
   document.getElementById('gmailBackupOverviewSearchClearBtn').style.display = 'none';
+  gmailOverviewExpanded.clear();
   renderGmailBackupOverview();
   document.getElementById('gmailBackupOverviewOverlay').classList.add('open');
 }
@@ -1839,9 +1842,10 @@ function renderGmailBackupOverview(){
   const list = document.getElementById('gmailBackupOverviewList');
 
   let rows = items.filter(i=>
-    getServiceCategory(i.service) === 'ແອັບໜັງສັ້ນ'
+    getServiceCategory(i.service) === 'ແອັບໜັງສັ້ນ' &&
+    i.gmailBackupCodes && i.gmailBackupCodes.trim()
   ).map(it=>{
-    const codes = (it.gmailBackupCodes||'').split('\n').map(c=>c.trim()).filter(Boolean);
+    const codes = it.gmailBackupCodes.split('\n').map(c=>c.trim()).filter(Boolean);
     const usedCount = codes.filter(c=>(it.gmailBackupUsedCodes||{})[c]).length;
     const remaining = codes.length - usedCount;
     return { it, total: codes.length, used: usedCount, remaining };
@@ -1854,35 +1858,60 @@ function renderGmailBackupOverview(){
     });
   }
 
-  // ຮຽງ: ຍັງບໍ່ມີລະຫັດເລີຍ (total=0) ຂຶ້ນກ່ອນສຸດ (ຕ້ອງການໃຫ້ຮີບເພີ່ມ) ແລ້ວຄ່ອຍຮຽງຕາມເຫຼືອໜ້ອຍ → ຫຼາຍ
-  rows.sort((a,b)=>{
-    if(a.total === 0 && b.total === 0) return 0;
-    if(a.total === 0) return -1;
-    if(b.total === 0) return 1;
-    return a.remaining - b.remaining;
-  });
+  rows.sort((a,b)=> a.remaining - b.remaining);
 
   if(rows.length === 0){
-    list.innerHTML = `<div style="color:var(--muted); padding:16px 0; text-align:center;">ຍັງບໍ່ມີໄອດີແອັບໜັງສັ້ນໃນສະຕັອກ</div>`;
+    list.innerHTML = `<div style="color:var(--muted); padding:16px 0; text-align:center;">ຍັງບໍ່ມີໄອດີແອັບໜັງສັ້ນທີ່ບັນທຶກລະຫັດ Gmail ສຳຮອງໄວ້</div>`;
     return;
   }
 
   list.innerHTML = rows.map(r=>{
-    const level = r.total === 0 ? 'low' : (r.remaining <= 2 ? 'low' : (r.remaining <= 4 ? 'mid' : 'ok'));
+    const level = r.remaining <= 2 ? 'low' : (r.remaining <= 4 ? 'mid' : 'ok');
     const color = getServiceColor(r.it.service);
-    const remainLabel = r.total === 0 ? 'ຍັງບໍ່ມີລະຫັດ' : `ເຫຼືອ ${r.remaining}/${r.total}`;
+    const remainLabel = `ເຫຼືອ ${r.remaining}/${r.total}`;
+    const isExpanded = gmailOverviewExpanded.has(r.it.id);
+    const codes = r.it.gmailBackupCodes.split('\n').map(c=>c.trim()).filter(Boolean);
     return `
-      <div class="gmail-overview-row ${level}">
-        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-          <div class="avatar" style="background:${color}; flex-shrink:0;">${escapeHtml((r.it.service||'?').trim().charAt(0).toUpperCase())}</div>
-          <div class="gmail-overview-info" style="min-width:0;">
-            <div class="service">${escapeHtml(r.it.service||'-')}${r.it.package ? ' · '+escapeHtml(r.it.package) : ''}</div>
-            <div class="email">${escapeHtml(r.it.account||'-')}</div>
+      <div class="gmail-overview-row ${level}" data-overview-toggle="${r.it.id}" style="cursor:pointer; flex-direction:column; align-items:stretch;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+            <div class="avatar" style="background:${color}; flex-shrink:0;">${escapeHtml((r.it.service||'?').trim().charAt(0).toUpperCase())}</div>
+            <div class="gmail-overview-info" style="min-width:0;">
+              <div class="service">${escapeHtml(r.it.service||'-')}${r.it.package ? ' · '+escapeHtml(r.it.package) : ''}</div>
+              <div class="email">${escapeHtml(r.it.account||'-')}</div>
+            </div>
           </div>
+          <span class="gmail-overview-remain ${level}">${remainLabel} ${isExpanded ? '▲' : '✏️'}</span>
         </div>
-        <span class="gmail-overview-remain ${level}">${remainLabel}</span>
+        ${isExpanded ? `
+        <div style="margin-top:10px; padding-top:10px; border-top:1px dashed var(--line);" onclick="event.stopPropagation();">
+          <div class="gmail-backup-code-list">
+            ${buildGmailBackupCodeRowsHtml(r.it, codes)}
+          </div>
+          <div class="otp-box-label" style="margin-top:12px;">✏️ ແກ້ໄຂລາຍການລະຫັດທັງໝົດ</div>
+          <textarea class="otp-input gmail-backup-textarea" data-overview-edit-input="${r.it.id}" placeholder="ແຖວລະ 1 ລະຫັດ">${escapeHtml(r.it.gmailBackupCodes||'')}</textarea>
+          <button class="btn small" data-overview-edit-save="${r.it.id}" style="width:100%; margin-top:6px;">ບັນທຶກການແກ້ໄຂ</button>
+        </div>` : ''}
       </div>`;
   }).join('');
+
+  list.querySelectorAll('[data-overview-toggle]').forEach(row=>{
+    row.addEventListener('click', (e)=>{
+      if(e.target.closest('[data-overview-edit-save]') || e.target.closest('textarea') || e.target.closest('[data-gmailbackup-toggle]') || e.target.closest('[data-gmailbackup-copy]')) return;
+      const id = row.getAttribute('data-overview-toggle');
+      if(gmailOverviewExpanded.has(id)) gmailOverviewExpanded.delete(id);
+      else gmailOverviewExpanded.add(id);
+      renderGmailBackupOverview();
+    });
+  });
+  list.querySelectorAll('[data-overview-edit-save]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const id = btn.getAttribute('data-overview-edit-save');
+      const textarea = list.querySelector(`[data-overview-edit-input="${id}"]`);
+      if(textarea) updateItemGmailBackup(id, textarea.value);
+    });
+  });
 }
 
 async function saveLog(newEntry){
