@@ -2580,6 +2580,8 @@ function updateBulkBar(filteredIds){
     ${selectedItemIds.size > 0 ? `
     <div class="bulk-btns">
       <button class="btn ghost small" id="bulkClearBtn">ຍົກເລີກການເລືອກ</button>
+      <button class="btn ghost small" id="bulkHideBtn" style="border-color:var(--warn); color:var(--warn);">🚫 ซ่อน (ມີບັນຫາ)</button>
+      <button class="btn ghost small" id="bulkUnhideBtn" style="border-color:var(--ok); color:var(--ok);">👁️ ເອົາອອກຈາກການເຊື່ອງ</button>
       <button class="btn danger small" id="bulkDeleteBtn">ລຶບທີ່ເລືອກ</button>
     </div>` : ''}`;
 
@@ -2593,11 +2595,31 @@ function updateBulkBar(filteredIds){
       selectedItemIds.clear();
       renderAll();
     });
+    document.getElementById('bulkHideBtn').addEventListener('click', ()=> bulkSetStatus('reported'));
+    document.getElementById('bulkUnhideBtn').addEventListener('click', ()=> bulkSetStatus('available'));
     document.getElementById('bulkDeleteBtn').addEventListener('click', ()=>{
       document.getElementById('bulkDeleteTitle').textContent = `ລຶບ ${selectedItemIds.size} ລາຍການທີ່ເລືອກ ແທ້ບໍ່?`;
       document.getElementById('bulkDeleteConfirmOverlay').classList.add('open');
     });
   }
+}
+
+async function bulkSetStatus(newStatus){
+  const idsToUpdate = Array.from(selectedItemIds);
+  if(idsToUpdate.length === 0) return;
+  const updatedItems = [];
+  items.forEach(it=>{
+    if(idsToUpdate.includes(it.id)){
+      it.status = newStatus;
+      it.updatedAt = Date.now();
+      updatedItems.push(it);
+    }
+  });
+  selectedItemIds.clear();
+  await saveItems();
+  updatedItems.forEach(it=>logActivity('edit', it, newStatus==='reported' ? 'ຖືກເຊື່ອງໄວ້ (ມີບັນຫາ) — ພະນັກງານຈະບໍ່ເຫັນ/ຮັບໄອດີນີ້ບໍ່ໄດ້' : 'ເອົາອອກຈາກການເຊື່ອງ ກັບມາໃຊ້ງານໄດ້ປົກກະຕິ'));
+  renderAll();
+  toast(newStatus==='reported' ? `ซ่อน ${updatedItems.length} รายการแล้ว` : `ยกเลิกการซ่อน ${updatedItems.length} รายการแล้ว`);
 }
 
 let pendingDeleteId = null;
