@@ -989,6 +989,7 @@
       <div class="brand-sub" id="brandSub">ກົດທີ່ແອັບເພື່ອຮັບໄອດີ</div>
     </div>
     <div style="display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; justify-content:flex-end;">
+      <button class="btn ghost small" id="headerHistoryBtn" title="ເບິ່ງປະຫວັດ">📜 ປະຫວັດ</button>
       <button class="btn ghost small" id="otpLookupBtn" title="ດຶງລະຫັດ OTP Netflix">🔑 OTP</button>
       <button class="btn ghost small" id="gmailBackupLookupBtn" title="ຄົ້ນຫາລະຫັດ Gmail ສຳຮອງ (ແອັບໜັງສັ້ນ)">🔐 8 ຫຼັກ</button>
       <button class="btn ghost small" id="darkModeToggle" title="ສະຫຼັບໂໝດມືດ/ສະຫວ່າງ">🌙</button>
@@ -1004,7 +1005,6 @@
       <div class="big">ຍັງບໍ່ມີໄອດີໃນສະຕັອກ</div>
       ລໍຖ້າແອັດມິນເພີ່ມສະຕັອກກ່ອນເດີ້
     </div>
-    <button class="btn ghost small" id="employeeHistoryBtn" style="width:100%; margin-top:16px;">📜 ປະຫວັດການຮັບໄອດີ</button>
   </div>
 
   <div id="adminView" style="display:none;">
@@ -1015,8 +1015,7 @@
     <div class="stat expiring"><div class="n" id="stat-expiring">0</div><div class="l">ໃກ້ໝົດອາຍຸ</div></div>
   </div>
 
-  <button class="btn ghost small" id="historyBtn" style="margin-bottom:14px;">📜 ເບິ່ງປະຫວັດການຊື້/ແກ້ໄຂ</button>
-  <button class="btn ghost small" id="gmailBackupOverviewBtn" style="margin-bottom:14px; margin-left:8px;">📊 ພາບລວມລະຫັດ Gmail ສຳຮອງ</button>
+  <button class="btn ghost small" id="gmailBackupOverviewBtn" style="margin-bottom:14px;">📊 ພາບລວມລະຫັດ Gmail ສຳຮອງ</button>
 
   <div class="toolbar">
     <div class="search-wrap">
@@ -1550,27 +1549,41 @@ async function updateItemLinkField(id, type, urlValue){
   toast('ອັບເດດ' + meta.label + 'ແລ້ວ');
 }
 
+function getLinkedGmailBackupItems(account){
+  return items.filter(i=>
+    getServiceCategory(i.service) === 'ແອັບໜັງສັ້ນ' &&
+    String(i.account||'').trim().toLowerCase() === String(account||'').trim().toLowerCase()
+  );
+}
+
 async function updateItemGmailBackup(id, codesValue){
   const idx = items.findIndex(i=>i.id===id);
   if(idx === -1) return;
-  items[idx].gmailBackupCodes = codesValue.trim();
-  items[idx].gmailBackupUpdatedAt = Date.now();
+  const trimmed = codesValue.trim();
+  const ts = Date.now();
+  const linked = getLinkedGmailBackupItems(items[idx].account);
+  linked.forEach(it=>{
+    it.gmailBackupCodes = trimmed;
+    it.gmailBackupUpdatedAt = ts;
+  });
   await saveItems();
   renderAll();
-  toast('ບັນທຶກລະຫັດ Gmail ສຳຮອງແລ້ວ');
+  toast(linked.length > 1 ? `ບັນທຶກ ແລະ ລິງກ໌ລະຫັດໃຫ້ ${linked.length} ແອັບທີ່ໃຊ້ອີເມວດຽວກັນແລ້ວ` : 'ບັນທຶກລະຫັດ Gmail ສຳຮອງແລ້ວ');
 }
 
 async function toggleGmailBackupUsed(id, code){
   const idx = items.findIndex(i=>i.id===id);
   if(idx === -1) return;
   const item = items[idx];
-  if(!item.gmailBackupUsedCodes) item.gmailBackupUsedCodes = {};
-  if(item.gmailBackupUsedCodes[code]){
-    delete item.gmailBackupUsedCodes[code];
-  } else {
-    item.gmailBackupUsedCodes[code] = Date.now();
-    logActivity('gmail_backup_used', item, `ໃຊ້ລະຫັດສຳຮອງ: ${code}`);
-  }
+  const currentlyUsed = !!(item.gmailBackupUsedCodes && item.gmailBackupUsedCodes[code]);
+  const linked = getLinkedGmailBackupItems(item.account);
+  const ts = Date.now();
+  linked.forEach(it=>{
+    if(!it.gmailBackupUsedCodes) it.gmailBackupUsedCodes = {};
+    if(currentlyUsed) delete it.gmailBackupUsedCodes[code];
+    else it.gmailBackupUsedCodes[code] = ts;
+  });
+  if(!currentlyUsed) logActivity('gmail_backup_used', item, `ໃຊ້ລະຫັດສຳຮອງ: ${code}`);
   await saveItems();
   renderAll();
 }
@@ -1579,9 +1592,13 @@ async function markGmailBackupUsed(id, code){
   const idx = items.findIndex(i=>i.id===id);
   if(idx === -1) return;
   const item = items[idx];
-  if(!item.gmailBackupUsedCodes) item.gmailBackupUsedCodes = {};
-  if(item.gmailBackupUsedCodes[code]) return; // ໝາຍໄວ້ແລ້ວ ບໍ່ຕ້ອງເຮັດຊ້ຳ
-  item.gmailBackupUsedCodes[code] = Date.now();
+  if(item.gmailBackupUsedCodes && item.gmailBackupUsedCodes[code]) return; // ໝາຍໄວ້ແລ້ວ ບໍ່ຕ້ອງເຮັດຊ້ຳ
+  const linked = getLinkedGmailBackupItems(item.account);
+  const ts = Date.now();
+  linked.forEach(it=>{
+    if(!it.gmailBackupUsedCodes) it.gmailBackupUsedCodes = {};
+    it.gmailBackupUsedCodes[code] = ts;
+  });
   logActivity('gmail_backup_used', item, `ໃຊ້ລະຫັດສຳຮອງ: ${code}`);
   await saveItems();
   renderAll();
@@ -1822,10 +1839,9 @@ function renderGmailBackupOverview(){
   const list = document.getElementById('gmailBackupOverviewList');
 
   let rows = items.filter(i=>
-    getServiceCategory(i.service) === 'ແອັບໜັງສັ້ນ' &&
-    i.gmailBackupCodes && i.gmailBackupCodes.trim()
+    getServiceCategory(i.service) === 'ແອັບໜັງສັ້ນ'
   ).map(it=>{
-    const codes = it.gmailBackupCodes.split('\n').map(c=>c.trim()).filter(Boolean);
+    const codes = (it.gmailBackupCodes||'').split('\n').map(c=>c.trim()).filter(Boolean);
     const usedCount = codes.filter(c=>(it.gmailBackupUsedCodes||{})[c]).length;
     const remaining = codes.length - usedCount;
     return { it, total: codes.length, used: usedCount, remaining };
@@ -1838,16 +1854,23 @@ function renderGmailBackupOverview(){
     });
   }
 
-  rows.sort((a,b)=> a.remaining - b.remaining);
+  // ຮຽງ: ຍັງບໍ່ມີລະຫັດເລີຍ (total=0) ຂຶ້ນກ່ອນສຸດ (ຕ້ອງການໃຫ້ຮີບເພີ່ມ) ແລ້ວຄ່ອຍຮຽງຕາມເຫຼືອໜ້ອຍ → ຫຼາຍ
+  rows.sort((a,b)=>{
+    if(a.total === 0 && b.total === 0) return 0;
+    if(a.total === 0) return -1;
+    if(b.total === 0) return 1;
+    return a.remaining - b.remaining;
+  });
 
   if(rows.length === 0){
-    list.innerHTML = `<div style="color:var(--muted); padding:16px 0; text-align:center;">ຍັງບໍ່ມີໄອດີແອັບໜັງສັ້ນທີ່ບັນທຶກລະຫັດ Gmail ສຳຮອງໄວ້</div>`;
+    list.innerHTML = `<div style="color:var(--muted); padding:16px 0; text-align:center;">ຍັງບໍ່ມີໄອດີແອັບໜັງສັ້ນໃນສະຕັອກ</div>`;
     return;
   }
 
   list.innerHTML = rows.map(r=>{
-    const level = r.remaining <= 2 ? 'low' : (r.remaining <= 4 ? 'mid' : 'ok');
+    const level = r.total === 0 ? 'low' : (r.remaining <= 2 ? 'low' : (r.remaining <= 4 ? 'mid' : 'ok'));
     const color = getServiceColor(r.it.service);
+    const remainLabel = r.total === 0 ? 'ຍັງບໍ່ມີລະຫັດ' : `ເຫຼືອ ${r.remaining}/${r.total}`;
     return `
       <div class="gmail-overview-row ${level}">
         <div style="display:flex; align-items:center; gap:10px; min-width:0;">
@@ -1857,22 +1880,37 @@ function renderGmailBackupOverview(){
             <div class="email">${escapeHtml(r.it.account||'-')}</div>
           </div>
         </div>
-        <span class="gmail-overview-remain ${level}">ເຫຼືອ ${r.remaining}/${r.total}</span>
+        <span class="gmail-overview-remain ${level}">${remainLabel}</span>
       </div>`;
   }).join('');
 }
 
-async function saveLog(){
+async function saveLog(newEntry){
   try{
-    await logDocRef.set({ list: activityLog });
+    // ໃຊ້ arrayUnion ເພື່ອ "ຕໍ່ທ້າຍ" ແບບ atomic ແທນທີ່ຈະຂຽນທັບທັງອາເລ
+    // (ຖ້າຂຽນທັບທັງກ້ອນ ແລ້ວມີ 2 ເຄື່ອງບັນທຶກພ້ອມກັນ ອັນທີ່ບັນທຶກຊ້າກວ່າຈະລຶບຂອງອີກຝ່າຍຫາຍໄປ)
+    await logDocRef.set({
+      list: firebase.firestore.FieldValue.arrayUnion(newEntry)
+    }, { merge: true });
   }catch(e){
     console.error(e);
     // ບໍ່ຕ້ອງແຈ້ງເຕືອນ ບໍ່ແມ່ນຂໍ້ມູນສຳຄັນເທົ່າຕົວສະຕັອກ
   }
 }
 
+async function trimActivityLogIfNeeded(){
+  // ຕັດຂໍ້ມູນເກົ່າອອກເປັນບາງຄັ້ງເທົ່ານັ້ນ (ບໍ່ແມ່ນທຸກຄັ້ງ) ເພື່ອຫຼີກລ່ຽງການຂຽນທັບຊ້ຳໆ
+  if(activityLog.length <= 350) return;
+  try{
+    const trimmed = activityLog.slice(0, 300);
+    await logDocRef.set({ list: trimmed });
+  }catch(e){
+    console.error(e);
+  }
+}
+
 function logActivity(type, snapshot, detail){
-  activityLog.unshift({
+  const entry = {
     id: 'log_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
     itemId: snapshot.id || null,
     type,
@@ -1884,9 +1922,10 @@ function logActivity(type, snapshot, detail){
     note: snapshot.note || '',
     price: snapshot.price ?? null,
     detail: detail || '',
-  });
-  if(activityLog.length > 300) activityLog = activityLog.slice(0, 300);
-  saveLog();
+  };
+  activityLog.unshift(entry); // ອັບເດດ local ໃຫ້ໜ້າຈໍຕອບສະໜອງໄວ (ຈະຖືກແທນທີ່ດ້ວຍຂໍ້ມູນຈິງຈາກ Firestore ອີກຄັ້ງຜ່ານ onSnapshot)
+  saveLog(entry);
+  trimActivityLogIfNeeded();
 }
 
 function formatDateTime(ts){
@@ -2905,7 +2944,7 @@ document.getElementById('searchClearBtn').addEventListener('click', ()=>{
   searchInput.focus();
 });
 document.getElementById('filter-status').addEventListener('change', ()=>{ stockPage = 1; renderAll(); });
-document.getElementById('historyBtn').addEventListener('click', ()=>{
+function openAdminHistory(){
   document.getElementById('historyTitle').textContent = 'ປະຫວັດການຊື້/ແກ້ໄຂ';
   document.getElementById('historyFilter').style.display = '';
   document.getElementById('historyFilter').value = '';
@@ -2916,8 +2955,9 @@ document.getElementById('historyBtn').addEventListener('click', ()=>{
   historyPage = 1;
   renderHistory();
   document.getElementById('historyOverlay').classList.add('open');
-});
-document.getElementById('employeeHistoryBtn').addEventListener('click', ()=>{
+}
+
+function openEmployeeHistory(){
   document.getElementById('historyTitle').textContent = 'ປະຫວັດການຮັບໄອດີ';
   document.getElementById('historyFilter').style.display = 'none';
   document.getElementById('historyFilter').value = 'claim';
@@ -2928,6 +2968,11 @@ document.getElementById('employeeHistoryBtn').addEventListener('click', ()=>{
   historyPage = 1;
   renderHistory();
   document.getElementById('historyOverlay').classList.add('open');
+}
+
+document.getElementById('headerHistoryBtn').addEventListener('click', ()=>{
+  if(mode === 'admin') openAdminHistory();
+  else openEmployeeHistory();
 });
 document.getElementById('historyFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
 document.getElementById('historyDateFilter').addEventListener('change', ()=>{ historyPage = 1; renderHistory(); });
