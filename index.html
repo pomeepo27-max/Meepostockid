@@ -1948,6 +1948,7 @@ function logActivity(type, snapshot, detail){
     package: snapshot.package || '',
     account: snapshot.account || '',
     password: snapshot.password || '',
+    customer: snapshot.customer || '',
     note: snapshot.note || '',
     price: snapshot.price ?? null,
     detail: detail || '',
@@ -2046,7 +2047,10 @@ function renderHistory(){
   if(serviceFilter) filtered = filtered.filter(h=>h.service===serviceFilter);
   if(searchTerm){
     filtered = filtered.filter(h=>{
-      const hay = [h.service, h.package, h.account, h.detail, h.note].join(' ').toLowerCase();
+      const hay = [h.service, h.package, h.account, h.customer, h.detail, h.note]
+        .map(v=>String(v||'').trim())
+        .join(' ')
+        .toLowerCase();
       return hay.includes(searchTerm);
     });
   }
@@ -2086,6 +2090,7 @@ function renderHistory(){
           <div class="htime">${formatRelativeDateTime(h.ts)}</div>
         </div>
         ${isClaim ? `
+        ${h.customer ? `<div class="hsub" style="margin-top:2px;">ລູກຄ້າ: ${escapeHtml(h.customer)}</div>` : ''}
         <div class="row" style="margin-top:8px;">
           <span class="k">ໄອດີ</span>
           <span class="v">${escapeHtml(h.account||'-')}</span>
