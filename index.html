@@ -1858,6 +1858,20 @@ function renderGmailBackupOverview(){
     });
   }
 
+  // ອີເມວດຽວກັນຖືກລິງກ໌ ແລະ ໃຊ້ລະຫັດຮ່ວມກັນຢູ່ແລ້ວ ຈຶ່ງບໍ່ຈຳເປັນຕ້ອງໂຊວ໌ຊ້ຳຫຼາຍແຖວ
+  const seenEmails = new Map();
+  rows.forEach(r=>{
+    const key = String(r.it.account||'').trim().toLowerCase();
+    if(!seenEmails.has(key)){
+      seenEmails.set(key, { ...r, linkedServices: new Set([r.it.service]), linkedCount: 1 });
+    } else {
+      const existing = seenEmails.get(key);
+      existing.linkedServices.add(r.it.service);
+      existing.linkedCount += 1;
+    }
+  });
+  rows = Array.from(seenEmails.values());
+
   rows.sort((a,b)=> a.remaining - b.remaining);
 
   if(rows.length === 0){
@@ -1868,6 +1882,7 @@ function renderGmailBackupOverview(){
   list.innerHTML = rows.map(r=>{
     const level = r.remaining <= 2 ? 'low' : (r.remaining <= 4 ? 'mid' : 'ok');
     const color = getServiceColor(r.it.service);
+    const serviceLabel = Array.from(r.linkedServices).join(', ');
     const remainLabel = `ເຫຼືອ ${r.remaining}/${r.total}`;
     const isExpanded = gmailOverviewExpanded.has(r.it.id);
     const codes = r.it.gmailBackupCodes.split('\n').map(c=>c.trim()).filter(Boolean);
@@ -1877,7 +1892,7 @@ function renderGmailBackupOverview(){
           <div style="display:flex; align-items:center; gap:10px; min-width:0;">
             <div class="avatar" style="background:${color}; flex-shrink:0;">${escapeHtml((r.it.service||'?').trim().charAt(0).toUpperCase())}</div>
             <div class="gmail-overview-info" style="min-width:0;">
-              <div class="service">${escapeHtml(r.it.service||'-')}${r.it.package ? ' · '+escapeHtml(r.it.package) : ''}</div>
+              <div class="service">${escapeHtml(serviceLabel||'-')}${r.linkedCount > 1 ? ` <span style="color:var(--muted); font-weight:400;">· ໃຊ້ຮ່ວມກັນ ${r.linkedCount} ໄອດີ</span>` : (r.it.package ? ' · '+escapeHtml(r.it.package) : '')}</div>
               <div class="email">${escapeHtml(r.it.account||'-')}</div>
             </div>
           </div>
@@ -2615,7 +2630,7 @@ function updateBulkBar(filteredIds){
     <div class="bulk-btns">
       <button class="btn ghost small" id="bulkClearBtn">ຍົກເລີກການເລືອກ</button>
       <button class="btn ghost small" id="bulkHideBtn" style="border-color:var(--warn); color:var(--warn);">🚫 ซ่อน (ມີບັນຫາ)</button>
-      <button class="btn ghost small" id="bulkUnhideBtn" style="border-color:var(--ok); color:var(--ok);">👁️ ເອົາອອກຈາກການເຊື່ອງ</button>
+      <button class="btn ghost small" id="bulkUnhideBtn" style="border-color:var(--ok); color:var(--ok);">✅ ພ້ອມຂາຍ</button>
       <button class="btn danger small" id="bulkDeleteBtn">ລຶບທີ່ເລືອກ</button>
     </div>` : ''}`;
 
