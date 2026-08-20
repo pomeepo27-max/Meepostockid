@@ -2852,15 +2852,33 @@ function requestClaim(id){
 }
 
 async function claimItem(id){
-  const idx = items.findIndex(i=>i.id===id);
-  if(idx === -1) return;
-  items[idx].status = 'sold';
-  items[idx].claimedAt = Date.now();
-  await saveItems();
-  logActivity('claim', items[idx]);
+  let claimedItem = null;
+  try{
+    await db.runTransaction(async (transaction)=>{
+      const doc = await transaction.get(itemsDocRef);
+      const freshList = (doc.exists && Array.isArray(doc.data().list)) ? doc.data().list : [];
+      const idx = freshList.findIndex(i=>i.id===id);
+      if(idx === -1){
+        throw new Error('ໄອດີນີ້ບໍ່ມີຢູ່ໃນສະຕັອກແລ້ວ (ອາດຖືກລຶບໄປ)');
+      }
+      if(freshList[idx].status !== 'available'){
+        throw new Error('ໄອດີນີ້ຖືກຄົນອື່ນຮັບໄປກ່ອນແລ້ວ ລອງເລືອກໃບອື່ນເບິ່ງເດີ້');
+      }
+      freshList[idx].status = 'sold';
+      freshList[idx].claimedAt = Date.now();
+      claimedItem = { ...freshList[idx] };
+      transaction.set(itemsDocRef, { list: freshList });
+    });
+  }catch(e){
+    console.error(e);
+    document.getElementById('claimOverlay').classList.remove('open');
+    toast(e && e.message ? e.message : 'ຮັບໄອດີບໍ່ສຳເລັດ ລອງໃໝ່ອີກຄັ້ງ');
+    return;
+  }
+  logActivity('claim', claimedItem);
   document.getElementById('claimOverlay').classList.remove('open');
-  showResult(items[idx]);
-  renderAll();
+  showResult(claimedItem);
+  // ບໍ່ຕ້ອງ renderAll() ເອງ — onSnapshot ຈະໄດ້ຮັບຂໍ້ມູນໃໝ່ຈາກ transaction ແລ້ວ render ໃຫ້ອັດຕະໂນມັດ
 }
 
 function showResult(it){
