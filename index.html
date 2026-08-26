@@ -3002,8 +3002,15 @@ async function saveForm(){
 
   if(editingId){
     const idx = items.findIndex(i=>i.id===editingId);
+    const prevStatus = items[idx].status;
     items[idx] = {...items[idx], ...data, updatedAt: Date.now()};
     logActivity('edit', items[idx]);
+    // ຖ້າແອັດມິນປ່ຽນສະຖານະເປັນ "ຂາຍແລ້ວ" ເອງຜ່ານຟອມແກ້ໄຂ (ບໍ່ໄດ້ຜ່ານປຸ່ມ "ຮັບໄອດີ" ຂອງພະນັກງານ)
+    // ໃຫ້ບັນທຶກເປັນ "claim" ນຳ ເພື່ອໃຫ້ຂຶ້ນໃນໜ້າປະຫວັດການຊື້ຂາຍນຳ ບໍ່ຫາຍໄປ
+    if(prevStatus !== 'sold' && data.status === 'sold'){
+      if(!items[idx].claimedAt) items[idx].claimedAt = Date.now();
+      logActivity('claim', items[idx], 'ແອັດມິນມາຣ໌ກຂາຍເອງຜ່ານຟອມແກ້ໄຂ');
+    }
   } else {
     const newItem = { id: 'id_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), createdAt: Date.now(), ...data };
     items.push(newItem);
