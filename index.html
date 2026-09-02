@@ -249,6 +249,7 @@
     box-shadow: 0 2px 8px rgba(120,100,160,0.10);
   }
   .history-item.claim{ border-left: 3px solid var(--ok); }
+  .history-item.sold_manual{ border-left: 3px solid var(--warn); }
   .history-item.create{ border-left: 3px solid var(--accent-2); }
   .history-item.edit{ border-left: 3px solid var(--warn); }
   .history-item.delete{ border-left: 3px solid var(--danger); }
@@ -263,6 +264,7 @@
     white-space: nowrap;
   }
   .history-item .htype.claim{ background: rgba(31,157,92,0.14); color: var(--ok); }
+  .history-item .htype.sold_manual{ background: rgba(224,138,30,0.14); color: var(--warn); }
   .history-item .htype.create{ background: rgba(124,92,255,0.14); color: var(--accent-2); }
   .history-item .htype.edit{ background: rgba(224,138,30,0.14); color: var(--warn); }
   .history-item .htype.delete{ background: rgba(229,64,95,0.14); color: var(--danger); }
@@ -1151,7 +1153,8 @@
     <div class="toolbar" id="historyFilterWrap" style="margin-bottom:10px;">
       <select id="historyFilter">
         <option value="">ທຸກປະເພດ</option>
-        <option value="claim">ຊື້/ຮັບໄອດີ</option>
+        <option value="claim">ຊື້/ຮັບໄອດີ (ພະນັກງານກົດຮັບ)</option>
+        <option value="sold_manual">ແອັດມິນມາຣ໌ກຂາຍເອງ</option>
         <option value="create">ເພີ່ມສິນຄ້າໃໝ່</option>
         <option value="edit">ແກ້ໄຂສິນຄ້າ</option>
         <option value="delete">ລຶບສິນຄ້າ</option>
@@ -1995,6 +1998,7 @@ function formatRelativeDateTime(ts){
 
 const HISTORY_LABELS = {
   claim: { label: 'ຊື້/ຮັບໄອດີ', verb: 'ພະນັກງານຮັບໄອດີນີ້ໄປ' },
+  sold_manual: { label: 'ແອັດມິນມາຣ໌ກຂາຍເອງ', verb: 'ແອັດມິນປ່ຽນສະຖານະເປັນຂາຍແລ້ວເອງຜ່ານຟອມແກ້ໄຂ' },
   create: { label: 'ເພີ່ມສິນຄ້າໃໝ່', verb: 'ເພີ່ມສິນຄ້າໃໝ່ເຂົ້າສະຕັອກ' },
   edit: { label: 'ແກ້ໄຂສິນຄ້າ', verb: 'ແກ້ໄຂຂໍ້ມູນສິນຄ້ານີ້' },
   delete: { label: 'ລຶບສິນຄ້າ', verb: 'ລຶບສິນຄ້ານີ້ອອກຈາກສະຕັອກ' },
@@ -2093,7 +2097,7 @@ function renderHistory(){
 
   const renderHistoryCard = (h)=>{
     const meta = HISTORY_LABELS[h.type] || { label: h.type, verb: '' };
-    const isClaim = h.type === 'claim';
+    const isClaim = h.type === 'claim' || h.type === 'sold_manual';
     return `
       <div class="history-item ${h.type}" style="flex-direction:column; align-items:stretch;">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
@@ -3006,10 +3010,10 @@ async function saveForm(){
     items[idx] = {...items[idx], ...data, updatedAt: Date.now()};
     logActivity('edit', items[idx]);
     // ຖ້າແອັດມິນປ່ຽນສະຖານະເປັນ "ຂາຍແລ້ວ" ເອງຜ່ານຟອມແກ້ໄຂ (ບໍ່ໄດ້ຜ່ານປຸ່ມ "ຮັບໄອດີ" ຂອງພະນັກງານ)
-    // ໃຫ້ບັນທຶກເປັນ "claim" ນຳ ເພື່ອໃຫ້ຂຶ້ນໃນໜ້າປະຫວັດການຊື້ຂາຍນຳ ບໍ່ຫາຍໄປ
+    // ບັນທຶກເປັນປະເພດແຍກຕ່າງຫາກ "sold_manual" ເພື່ອບໍ່ໃຫ້ປົນກັບປະຫວັດການຮັບໄອດີຂອງພະນັກງານ (claim)
     if(prevStatus !== 'sold' && data.status === 'sold'){
       if(!items[idx].claimedAt) items[idx].claimedAt = Date.now();
-      logActivity('claim', items[idx], 'ແອັດມິນມາຣ໌ກຂາຍເອງຜ່ານຟອມແກ້ໄຂ');
+      logActivity('sold_manual', items[idx], 'ແອັດມິນມາຣ໌ກຂາຍເອງຜ່ານຟອມແກ້ໄຂ');
     }
   } else {
     const newItem = { id: 'id_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), createdAt: Date.now(), ...data };
