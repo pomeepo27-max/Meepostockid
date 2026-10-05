@@ -2518,6 +2518,7 @@ function render(){
         <div class="actions">
           <button class="btn ghost small" data-edit="${it.id}">ແກ້ໄຂ</button>
           <button class="btn ghost small" data-dup="${it.id}">ກ໊ອບປີ້ສິນຄ້າ</button>
+          <button class="btn ghost small" data-quickadd="${it.id}" title="ເພີ່ມໄອດີໃໝ່ໂດຍໃຊ້ຂໍ້ມູນນີ້ເປັນແມ່ແບບ (ໂນ໊ດ/ລາຄາ/ແພັກເກັດ ຄືເກົ່າ ແຕ່ໄອດີ-ລະຫັດວ່າງໄວ້ໃຫ້ພິມໃໝ່)">➕ ເພີ່ມແບບນີ້ອີກ</button>
           <button class="btn danger small" data-del="${it.id}">ລຶບ</button>
         </div>
       </div>
@@ -2603,6 +2604,9 @@ function render(){
   });
   list.querySelectorAll('[data-dup]').forEach(btn=>{
     btn.addEventListener('click', ()=> duplicateItem(btn.getAttribute('data-dup')));
+  });
+  list.querySelectorAll('[data-quickadd]').forEach(btn=>{
+    btn.addEventListener('click', ()=> quickAddFromTemplate(btn.getAttribute('data-quickadd')));
   });
   list.querySelectorAll('[data-del]').forEach(btn=>{
     btn.addEventListener('click', ()=> requestDelete(btn.getAttribute('data-del')));
@@ -2952,6 +2956,23 @@ async function duplicateItem(id){
   logActivity('create', newItem);
   renderAll();
   toast('ກ໊ອບປີ້ສິນຄ້າສຳເລັດ ເພີ່ມເປັນລາຍການໃໝ່ແລ້ວ');
+}
+
+function quickAddFromTemplate(id){
+  const src = items.find(i=>i.id===id);
+  if(!src) return;
+  openSheet(null); // ເປີດຟອມ "ເພີ່ມໄອດີໃໝ່" ທຳມະດາ (ບໍ່ແມ່ນແກ້ໄຂ)
+  // ຄັດລອກຂໍ້ມູນທີ່ໃຊ້ຮ່ວມກັນມາໃສ່ໃຫ້ ແຕ່ເວັ້ນໄອດີ/ລະຫັດ/ລູກຄ້າໄວ້ໃຫ້ພິມໃໝ່
+  document.getElementById('f-service').value = src.service || '';
+  document.getElementById('f-package').value = src.package || '';
+  document.getElementById('f-cost').value = src.cost ?? '';
+  document.getElementById('f-price').value = src.price ?? '';
+  document.getElementById('f-expiry').value = src.expiry || '';
+  document.getElementById('f-note').value = src.note || '';
+  document.getElementById('f-account').value = '';
+  document.getElementById('f-password').value = '';
+  document.getElementById('f-customer').value = '';
+  document.getElementById('f-account').focus();
 }
 
 function openSheet(id){
